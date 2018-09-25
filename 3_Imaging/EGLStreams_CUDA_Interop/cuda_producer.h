@@ -31,6 +31,7 @@ typedef struct _test_cuda_producer_s
     //  Stream params
     char *fileName1;
     char *fileName2;
+    unsigned char *pBuff;
     int   frameCount;
     bool isARGB;
     bool pitchLinearOutput;
@@ -38,6 +39,10 @@ typedef struct _test_cuda_producer_s
     unsigned int height;
     CUcontext context;
     CUeglStreamConnection cudaConn;
+    CUdeviceptr cudaPtrARGB[1];
+    CUdeviceptr cudaPtrYUV[3];
+    CUarray cudaArrARGB[1];
+    CUarray cudaArrYUV[3];
     EGLStreamKHR eglStream;
     EGLDisplay eglDisplay;
 } test_cuda_producer_s;

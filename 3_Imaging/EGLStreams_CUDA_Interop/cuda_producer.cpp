@@ -121,14 +121,12 @@ done:
 CUresult cudaProducerTest(test_cuda_producer_s *cudaProducer, char *file)
 {
     int framenum = 0;
-    unsigned char *pBuff = NULL;
     CUarray cudaArr[3] = {0};
-    CUDA_ARRAY3D_DESCRIPTOR desc = {0};
-    CUdeviceptr cudaPtr[3] = {0};
+    CUdeviceptr cudaPtr[3] = {0, 0, 0};
     unsigned int bufferSize;
     CUresult cuStatus = CUDA_SUCCESS;
     unsigned int i, surfNum, uvOffset[3]={0};
-    unsigned int copyWidthInBytes[3]={0}, copyHeight[3]={0};
+    unsigned int copyWidthInBytes[3]={0, 0, 0}, copyHeight[3]={0, 0, 0};
     CUeglColorFormat eglColorFormat;
     FILE *file_p;
     CUeglFrame cudaEgl;
@@ -139,18 +137,11 @@ CUresult cudaProducerTest(test_cuda_producer_s *cudaProducer, char *file)
         printf("CudaProducer: Error opening file: %s\n", file);
         goto done;
     }
-    pBuff = (unsigned char*) malloc((cudaProducer->width*cudaProducer->height*4));
-    if(!pBuff) {
-        printf("CudaProducer: Failed to allocate image buffer\n");
-        goto done;
-    }
+
     if (cudaProducer->pitchLinearOutput) {
         if (cudaProducer->isARGB) {
-            cuStatus = cuMemAlloc(&cudaPtr[0], (cudaProducer->width*cudaProducer->height*4));
-            if(cuStatus != CUDA_SUCCESS) {
-                printf("Create CUDA pointer failed, cuStatus=%d\n", cuStatus);
-                goto done;
-            }
+
+            cudaPtr[0] = cudaProducer->cudaPtrARGB[0];
         } else { //YUV case
             for (i = 0; i < 3; i++) {
                 if (i == 0) {
@@ -159,50 +150,25 @@ CUresult cudaProducerTest(test_cuda_producer_s *cudaProducer, char *file)
                 else {
                     bufferSize = cudaProducer->width * cudaProducer->height/4;
                 }
-                cuStatus = cuMemAlloc(&cudaPtr[i], bufferSize);
-                if(cuStatus != CUDA_SUCCESS) {
-                    printf("Create CUDA pointer %d failed, cuStatus=%d\n", i, cuStatus);
-                    goto done;
-                }
+
+                cudaPtr[i] = cudaProducer->cudaPtrYUV[i];
             }
         }
     } else {
-        desc.Format = CU_AD_FORMAT_UNSIGNED_INT8;
-        desc.Depth = 1;
-        desc.Flags = CUDA_ARRAY3D_SURFACE_LDST;
+
         if (cudaProducer->isARGB) {
-            desc.NumChannels = 4;
-            desc.Width = cudaProducer->width * 4;
-            desc.Height = cudaProducer->height;
-            cuStatus = cuArray3DCreate(&cudaArr[0], &desc);
-            if(cuStatus != CUDA_SUCCESS) {
-                printf("Create CUDA array failed, cuStatus=%d\n", cuStatus);
-                goto done;
-            }
-        } else { //YUV case
+            cudaArr[0] = cudaProducer->cudaArrARGB[0];
+        }
+        else
+        {
             for (i=0; i < 3; i++) {
-                if (i == 0) {
-                    desc.NumChannels = 1;
-                    desc.Width = cudaProducer->width;
-                    desc.Height = cudaProducer->height;
-                } else { // U/V surface as planar
-                    desc.NumChannels = 1;
-                    desc.Width = cudaProducer->width/2;
-                    desc.Height = cudaProducer->height/2;
-                }
-                checkCudaErrors(cuCtxPushCurrent(cudaProducer->context));
-                cuStatus = cuArray3DCreate(&cudaArr[i], &desc);
-                if(cuStatus != CUDA_SUCCESS) {
-                    printf("Create CUDA array failed, cuStatus=%d\n", cuStatus);
-                    goto done;
-                }
-                checkCudaErrors(cuCtxPopCurrent(&oldContext));
+                cudaArr[i] = cudaProducer->cudaArrYUV[i];
             }
         }
     }
     uvOffset[0] = 0;
     if (cudaProducer->isARGB) {
-        if (CUDA_SUCCESS != cudaProducerReadARGBFrame(file_p, framenum, cudaProducer->width, cudaProducer->height, pBuff)) {
+        if (CUDA_SUCCESS != cudaProducerReadARGBFrame(file_p, framenum, cudaProducer->width, cudaProducer->height, cudaProducer->pBuff)) {
             printf("cuda producer, read ARGB frame failed\n");
             goto done;
         }
@@ -211,7 +177,7 @@ CUresult cudaProducerTest(test_cuda_producer_s *cudaProducer, char *file)
         surfNum = 1;
         eglColorFormat = CU_EGL_COLOR_FORMAT_ARGB;
     } else {
-        if (CUDA_SUCCESS != cudaProducerReadYUVFrame(file_p, framenum, cudaProducer->width, cudaProducer->height, pBuff)) {
+        if (CUDA_SUCCESS != cudaProducerReadYUVFrame(file_p, framenum, cudaProducer->width, cudaProducer->height, cudaProducer->pBuff)) {
             printf("cuda producer, reading YUV frame failed\n");
             goto done;
         }
@@ -228,30 +194,21 @@ CUresult cudaProducerTest(test_cuda_producer_s *cudaProducer, char *file)
     }
     if (cudaProducer->pitchLinearOutput) {
         for (i=0; i<surfNum; i++) {
-            cuStatus = cuCtxSynchronize();
-            if (cuStatus != CUDA_SUCCESS) {
-                printf ("cuCtxSynchronize failed \n");
-                goto done;
-            }
-            cuStatus = cuMemcpy(cudaPtr[i], (CUdeviceptr)(pBuff + uvOffset[i]), copyWidthInBytes[i]*copyHeight[i]);
+            cuStatus = cuMemcpy(cudaPtr[i], (CUdeviceptr)(cudaProducer->pBuff + uvOffset[i]), copyWidthInBytes[i]*copyHeight[i]);
+
             if (cuStatus != CUDA_SUCCESS) {
                 printf("Cuda producer: cuMemCpy pitchlinear failed, cuStatus =%d\n",cuStatus);
                 goto done;
             }
         }
     } else {
-        //copy pBuff to cudaArray
+        //copy cudaProducer->pBuff to cudaArray
         CUDA_MEMCPY3D cpdesc;
         for (i=0; i < surfNum; i++) {
-            cuStatus = cuCtxSynchronize();
-            if (cuStatus != CUDA_SUCCESS) {
-                printf ("cuCtxSynchronize failed \n");
-                goto done;
-            }
             memset(&cpdesc, 0, sizeof(cpdesc));
             cpdesc.srcXInBytes = cpdesc.srcY = cpdesc.srcZ = cpdesc.srcLOD = 0;
             cpdesc.srcMemoryType = CU_MEMORYTYPE_HOST;
-            cpdesc.srcHost = (void *)(pBuff + uvOffset[i]);
+            cpdesc.srcHost = (void *)(cudaProducer->pBuff + uvOffset[i]);
             cpdesc.dstXInBytes = cpdesc.dstY = cpdesc.dstZ = cpdesc.dstLOD = 0;
             cpdesc.dstMemoryType = CU_MEMORYTYPE_ARRAY;
             cpdesc.dstArray = cudaArr[i];
@@ -281,21 +238,19 @@ CUresult cudaProducerTest(test_cuda_producer_s *cudaProducer, char *file)
     cudaEgl.numChannels = (eglColorFormat == CU_EGL_COLOR_FORMAT_ARGB) ? 4: 1;
     cudaEgl.eglColorFormat = eglColorFormat;
     cudaEgl.cuFormat = CU_AD_FORMAT_UNSIGNED_INT8;
-    
+
     cuStatus = cuEGLStreamProducerPresentFrame(&cudaProducer->cudaConn, cudaEgl, NULL);
     if (cuStatus != CUDA_SUCCESS) {
         printf("cuda Producer present frame FAILED with custatus= %d\n", cuStatus);
         goto done;
     }
+
 done:
     if (file_p) {
         fclose(file_p);
         file_p = NULL;
     }
-    if (pBuff) {
-        free(pBuff);
-        pBuff = NULL;
-    }
+
     return cuStatus;
 }
 
@@ -317,6 +272,66 @@ CUresult cudaDeviceCreateProducer(test_cuda_producer_s *cudaProducer)
         printf("failed to create CUDA context\n");
         return status;
     }
+
+    status = cuMemAlloc(&cudaProducer->cudaPtrARGB[0], (WIDTH*HEIGHT*4));
+    if(status != CUDA_SUCCESS) {
+        printf("Create CUDA pointer failed, cuStatus=%d\n", status);
+        return status;
+    }
+
+    status = cuMemAlloc(&cudaProducer->cudaPtrYUV[0], (WIDTH*HEIGHT));
+    if(status != CUDA_SUCCESS) {
+        printf("Create CUDA pointer failed, cuStatus=%d\n", status);
+        return status;
+    }
+    status = cuMemAlloc(&cudaProducer->cudaPtrYUV[1], (WIDTH*HEIGHT) / 4);
+    if(status != CUDA_SUCCESS) {
+        printf("Create CUDA pointer failed, cuStatus=%d\n", status);
+        return status;
+    }
+    status = cuMemAlloc(&cudaProducer->cudaPtrYUV[2], (WIDTH*HEIGHT) / 4);
+    if(status != CUDA_SUCCESS) {
+        printf("Create CUDA pointer failed, cuStatus=%d\n", status);
+        return status;
+    }
+
+    CUDA_ARRAY3D_DESCRIPTOR desc = {0};
+
+    desc.Format = CU_AD_FORMAT_UNSIGNED_INT8;
+    desc.Depth = 1;
+    desc.Flags = CUDA_ARRAY3D_SURFACE_LDST;
+    desc.NumChannels = 4;
+    desc.Width = WIDTH * 4;
+    desc.Height = HEIGHT;
+    status = cuArray3DCreate(&cudaProducer->cudaArrARGB[0], &desc);
+    if(status != CUDA_SUCCESS) {
+        printf("Create CUDA array failed, cuStatus=%d\n", status);
+        return status;
+    }
+
+    for (int i=0; i < 3; i++) {
+        if (i == 0) {
+            desc.NumChannels = 1;
+            desc.Width = WIDTH;
+            desc.Height = HEIGHT;
+        }
+        else { // U/V surface as planar
+            desc.NumChannels = 1;
+            desc.Width = WIDTH/2;
+            desc.Height = HEIGHT/2;
+        }
+        status = cuArray3DCreate(&cudaProducer->cudaArrYUV[i], &desc);
+        if(status != CUDA_SUCCESS) {
+            printf("Create CUDA array failed, cuStatus=%d\n", status);
+            return status;
+        }
+    }
+
+    cudaProducer->pBuff = (unsigned char*) malloc((WIDTH*HEIGHT*4));
+    if(!cudaProducer->pBuff) {
+        printf("CudaProducer: Failed to allocate image buffer\n");
+    }
+
     checkCudaErrors(cuCtxPopCurrent(&cudaProducer->context));
     return status;
 }
@@ -339,6 +354,18 @@ void cudaProducerInit(test_cuda_producer_s *cudaProducer, EGLDisplay eglDisplay,
 
 CUresult cudaProducerDeinit(test_cuda_producer_s *cudaProducer)
 {
+    if (cudaProducer->pBuff)
+        free(cudaProducer->pBuff);
+
+    checkCudaErrors(cuMemFree(cudaProducer->cudaPtrARGB[0]));
+    checkCudaErrors(cuMemFree(cudaProducer->cudaPtrYUV[0]));
+    checkCudaErrors(cuMemFree(cudaProducer->cudaPtrYUV[1]));
+    checkCudaErrors(cuMemFree(cudaProducer->cudaPtrYUV[2]));
+    checkCudaErrors(cuArrayDestroy(cudaProducer->cudaArrARGB[0]));
+    checkCudaErrors(cuArrayDestroy(cudaProducer->cudaArrYUV[0]));
+    checkCudaErrors(cuArrayDestroy(cudaProducer->cudaArrYUV[1]));
+    checkCudaErrors(cuArrayDestroy(cudaProducer->cudaArrYUV[2]));
+
     return cuEGLStreamProducerDisconnect(&cudaProducer->cudaConn);
 }
 

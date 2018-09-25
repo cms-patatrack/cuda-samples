@@ -15,6 +15,7 @@
 //
 
 #include "eglstrm_common.h"
+#include <EGL/eglext_nv.h>
 
 EGLStreamKHR eglStream;
 EGLDisplay   g_display;
@@ -73,7 +74,7 @@ void PrintEGLStreamState(EGLint streamState)
 
 int EGLStreamInit()
 {
-    static const EGLint streamAttrMailboxMode[] = { EGL_NONE };
+    static const EGLint streamAttrMailboxMode[] = { EGL_SUPPORT_REUSE_NV, EGL_FALSE, EGL_NONE };
     EGLBoolean eglStatus;
     g_display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     if (g_display == EGL_NO_DISPLAY) {

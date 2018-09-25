@@ -29,6 +29,8 @@
 EXTENSION_LIST(EXTLST_EXTERN)
 #endif
 
+#define NUM_TRAILS 4
+
 bool signal_stop = 0;
 
 static void
@@ -92,7 +94,7 @@ int main(int argc, char **argv)
     checkCudaErrors(cuCtxPopCurrent(&cudaProducer.context));
 
     // Initialize producer
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < NUM_TRAILS; i++) {
         if (streamState != EGL_STREAM_STATE_CONNECTING_KHR) {
             if(!eglQueryStreamKHR(
                     g_display,
@@ -116,7 +118,7 @@ int main(int argc, char **argv)
             args.infile1       = "cuda_yuv_f_1.yuv";
             args.infile2       = "cuda_yuv_f_2.yuv";
         }
-        if (i < 2) {
+        if ((i % 4) < 2) {
             args.pitchLinearOutput = 1;
         }
         else {
