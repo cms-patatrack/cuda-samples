@@ -527,7 +527,7 @@ initCUDA(int argc, char **argv, CUfunction *transform)
 
     // get compute capabilities and the devicename
     checkCudaErrors(cuDeviceComputeCapability(&major, &minor, cuDevice));
-    checkCudaErrors(cuDeviceGetName(deviceName, 256, cuDevice));
+    checkCudaErrors(cuDeviceGetName(deviceName, sizeof(deviceName), cuDevice));
     printf("> GPU Device has SM %d.%d compute capability\n", major, minor);
 
     status = cuCtxCreate(&cuContext, 0, cuDevice);

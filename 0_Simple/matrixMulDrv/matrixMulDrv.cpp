@@ -336,7 +336,7 @@ static CUresult initCUDA(int argc, char **argv, CUfunction *pMatrixMul) {
       &major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, cuDevice));
   checkCudaErrors(cuDeviceGetAttribute(
       &minor, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, cuDevice));
-  checkCudaErrors(cuDeviceGetName(deviceName, 256, cuDevice));
+  checkCudaErrors(cuDeviceGetName(deviceName, sizeof(deviceName), cuDevice));
   printf("> GPU Device has SM %d.%d compute capability\n", major, minor);
 
   checkCudaErrors(cuDeviceTotalMem(&totalGlobalMem, cuDevice));
