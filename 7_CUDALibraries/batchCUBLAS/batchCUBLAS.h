@@ -17,7 +17,7 @@
 #include <cublas_v2.h>
 #include <stdlib.h>
 #include <math.h>
-#include <host_defines.h>
+#include <cuda_runtime_api.h>
 
 #define SWITCH_CHAR             '-'
 

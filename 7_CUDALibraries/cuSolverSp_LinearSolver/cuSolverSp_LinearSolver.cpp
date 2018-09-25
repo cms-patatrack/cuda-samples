@@ -85,6 +85,7 @@ void UsageSP(void)
     printf( "-P=<name>    : choose a reordering\n");
     printf( "              symrcm (Reverse Cuthill-McKee)\n");
     printf( "              symamd (Approximate Minimum Degree)\n");
+    printf( "              metis  (nested dissection)\n");
     printf( "-file=<filename> : filename containing a matrix in MM format\n");
     printf( "-device=<device_id> : <device_id> if want to run on specific GPU\n");
 
@@ -127,7 +128,9 @@ void parseCommandLineArguments(int argc, char *argv[], struct testOpts &opts)
 
         if (reorderType)
         {
-            if ((STRCASECMP(reorderType, "symrcm") != 0) && (STRCASECMP(reorderType, "symamd") != 0))
+            if ((STRCASECMP(reorderType, "symrcm") != 0) &&
+				(STRCASECMP(reorderType, "symamd") != 0) &&
+				(STRCASECMP(reorderType, "metis" ) != 0)    )
             {
                 printf("\nIncorrect argument passed to -P option\n");
                 UsageSP();
@@ -341,7 +344,7 @@ int main (int argc, char *argv[])
     }
 
     printf("step 2: reorder the matrix A to minimize zero fill-in\n");
-    printf("        if the user choose a reordering by -P=symrcm or -P=symamd\n");
+    printf("        if the user choose a reordering by -P=symrcm, -P=symamd or -P=metis\n");
 
     if (NULL != opts.reorder)
     {
@@ -359,6 +362,15 @@ int main (int argc, char *argv[])
             checkCudaErrors(cusolverSpXcsrsymamdHost(
                 handle, rowsA, nnzA,
                 descrA, h_csrRowPtrA, h_csrColIndA,
+                h_Q));
+        }
+		else if ( 0 == strcmp(opts.reorder, "metis") )
+        {
+            printf("step 2.1: Q = metis(A) \n");
+            checkCudaErrors(cusolverSpXcsrmetisndHost(
+                handle, rowsA, nnzA,
+                descrA, h_csrRowPtrA, h_csrColIndA,
+				NULL, /* default setting. */
                 h_Q));
         }
         else 

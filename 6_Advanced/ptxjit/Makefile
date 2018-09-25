@@ -141,7 +141,7 @@ else ifneq ($(TARGET_ARCH),$(HOST_ARCH))
             export QNX_TARGET
             HOST_COMPILER ?= $(QNX_HOST)/usr/bin/aarch64-unknown-nto-qnx7.0.0-g++
         else ifeq ($(TARGET_OS), android)
-            HOST_COMPILER ?= aarch64-linux-android-g++
+            HOST_COMPILER ?= aarch64-linux-android-clang++
         endif
     else ifeq ($(TARGET_ARCH),ppc64le)
         HOST_COMPILER ?= powerpc64le-linux-gnu-g++
@@ -249,6 +249,8 @@ LIBRARIES :=
 
 ################################################################################
 
+PTX_FILE := ptxjit_kernel${TARGET_SIZE}.ptx
+
 # Gencode arguments
 SMS ?=
 
@@ -325,7 +327,7 @@ endif
 # Target rules
 all: build
 
-build: ptxjit
+build: ptxjit $(PTX_FILE)
 
 check.deps:
 ifeq ($(SAMPLE_ENABLED),0)
@@ -333,6 +335,13 @@ ifeq ($(SAMPLE_ENABLED),0)
 else
 	@echo "Sample is ready - all dependencies have been met"
 endif
+
+$(PTX_FILE): ptxjit_kernel.cu
+	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -ptx $<
+	$(EXEC) mkdir -p data
+	$(EXEC) cp -f $@ ./data
+	$(EXEC) mkdir -p ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
+	$(EXEC) cp -f $@ ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
 
 ptxjit.o:ptxjit.cpp
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
@@ -346,7 +355,8 @@ run: build
 	$(EXEC) ./ptxjit
 
 clean:
-	rm -f ptxjit ptxjit.o
+	rm -f ptxjit ptxjit.o  data/$(PTX_FILE) $(PTX_FILE)
 	rm -rf ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)/ptxjit
+	rm -rf ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)/$(PTX_FILE)
 
 clobber: clean

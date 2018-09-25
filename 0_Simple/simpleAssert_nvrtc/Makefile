@@ -141,7 +141,7 @@ else ifneq ($(TARGET_ARCH),$(HOST_ARCH))
             export QNX_TARGET
             HOST_COMPILER ?= $(QNX_HOST)/usr/bin/aarch64-unknown-nto-qnx7.0.0-g++
         else ifeq ($(TARGET_OS), android)
-            HOST_COMPILER ?= aarch64-linux-android-g++
+            HOST_COMPILER ?= aarch64-linux-android-clang++
         endif
     else ifeq ($(TARGET_ARCH),ppc64le)
         HOST_COMPILER ?= powerpc64le-linux-gnu-g++
@@ -260,6 +260,11 @@ INCLUDES  := -I../../common/inc
 LIBRARIES :=
 
 ################################################################################
+
+# libNVRTC specific libraries
+ifeq ($(TARGET_OS),darwin)
+ LDFLAGS += -L$(CUDA_PATH)/lib -F/Library/Frameworks -framework CUDA
+endif
 
 ifeq ($(TARGET_OS),darwin)
   ALL_LDFLAGS += -Xcompiler -F/Library/Frameworks -Xlinker -framework -Xlinker CUDA

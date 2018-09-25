@@ -141,7 +141,7 @@ else ifneq ($(TARGET_ARCH),$(HOST_ARCH))
             export QNX_TARGET
             HOST_COMPILER ?= $(QNX_HOST)/usr/bin/aarch64-unknown-nto-qnx7.0.0-g++
         else ifeq ($(TARGET_OS), android)
-            HOST_COMPILER ?= aarch64-linux-android-g++
+            HOST_COMPILER ?= aarch64-linux-android-clang++
         endif
     else ifeq ($(TARGET_ARCH),ppc64le)
         HOST_COMPILER ?= powerpc64le-linux-gnu-g++
@@ -251,7 +251,13 @@ LIBRARIES :=
 
 # Attempt to compile a minimal OpenMP application. If a.out exists, OpenMP is properly set up.
 ifneq (,$(filter $(TARGET_OS),linux android))
-LIBRARIES += -lgomp
+
+ifneq (,$(filter $(TARGET_OS), android))
+     LIBRARIES += -lomp
+else
+     LIBRARIES += -lgomp
+endif
+
 ALL_CCFLAGS += -Xcompiler -fopenmp
 $(shell echo "#include <omp.h>" > test.c ; echo "int main() { omp_get_num_threads(); return 0; }" >> test.c ; $(HOST_COMPILER) -fopenmp test.c)
 OPENMP ?= $(shell find a.out 2>/dev/null)
@@ -275,7 +281,7 @@ ALL_CCFLAGS += -DUSE_PTHREADS
 endif
 
 # Gencode arguments
-SMS ?= 30 35 37 50 52 60 61 70
+SMS ?= 30 35 37 50 52 60 61 70 75
 
 ifeq ($(SMS),)
 $(info >>> WARNING - no SM architectures have been specified - waiving sample <<<)

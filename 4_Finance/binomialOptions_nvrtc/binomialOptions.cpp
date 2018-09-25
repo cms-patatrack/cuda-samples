@@ -25,7 +25,6 @@
 #include <cuda.h>
 
 #include <helper_functions.h>
-#include <helper_cuda.h>
 
 #include "binomialOptions_common.h"
 #include "realtype.h"

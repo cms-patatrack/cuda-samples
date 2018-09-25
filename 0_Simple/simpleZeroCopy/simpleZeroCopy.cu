@@ -16,7 +16,6 @@
 #include <assert.h>
 
 // CUDA runtime
-#include <cuda.h>
 #include <cuda_runtime.h>
 
 // helper functions and utilities to work with CUDA
@@ -156,9 +155,9 @@ int main(int argc, char **argv)
         b = (float *) ALIGN_UP(b_UA, MEMORY_ALIGNMENT);
         c = (float *) ALIGN_UP(c_UA, MEMORY_ALIGNMENT);
 
-        checkCudaErrors(cudaHostRegister(a, bytes, CU_MEMHOSTALLOC_DEVICEMAP));
-        checkCudaErrors(cudaHostRegister(b, bytes, CU_MEMHOSTALLOC_DEVICEMAP));
-        checkCudaErrors(cudaHostRegister(c, bytes, CU_MEMHOSTALLOC_DEVICEMAP));
+        checkCudaErrors(cudaHostRegister(a, bytes, cudaHostRegisterMapped));
+        checkCudaErrors(cudaHostRegister(b, bytes, cudaHostRegisterMapped));
+        checkCudaErrors(cudaHostRegister(c, bytes, cudaHostRegisterMapped));
 #endif
     }
     else

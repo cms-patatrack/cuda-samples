@@ -21,9 +21,18 @@ const char *sSampleName = "P2P (Peer-to-Peer) GPU Bandwidth Latency Test";
 
 typedef enum
 {
-    P2P_WRITE = 0, 
+    P2P_WRITE = 0,
     P2P_READ = 1,
 }P2PDataTransfer;
+
+typedef enum
+{
+    CE = 0, 
+    SM = 1,
+}P2PEngine;
+
+P2PEngine p2p_mechanism = CE; // By default use Copy Engine
+
 
 //Macro for checking cuda errors following a cuda launch or api call
 #define cudaCheckError() {                                          \
@@ -33,17 +42,32 @@ typedef enum
             exit(EXIT_FAILURE);                                           \
         }                                                                 \
     }
-__global__ void delay(volatile int *flag, unsigned long long timeout_ns = 10000000000)
+__global__ void delay(volatile int *flag, unsigned long long timeout_clocks = 10000000)
 {
     // Wait until the application notifies us that it has completed queuing up the
     // experiment, or timeout and exit, allowing the application to make progress
-    register unsigned long long start_time, sample_time;
-    asm("mov.u64 %0, %%globaltimer;" : "=l"(start_time));
+    long long int start_clock, sample_clock;
+    start_clock = clock64();
+
     while (!*flag) {
-        asm("mov.u64 %0, %%globaltimer;" : "=l"(sample_time));
-        if (sample_time - start_time > timeout_ns) {
+        sample_clock = clock64();
+
+        if (sample_clock - start_clock > timeout_clocks) {
             break;
         }
+    }
+}
+
+// This kernel is for demonstration purposes only, not a performant kernel for p2p transfers.
+__global__ void copyp2p(int4* __restrict__  dest, int4 const* __restrict__ src, size_t num_elems)
+{
+    size_t globalId = blockIdx.x * blockDim.x + threadIdx.x;
+    size_t gridSize = blockDim.x * gridDim.x;
+
+    #pragma unroll(5)
+    for (size_t i=globalId; i < num_elems; i+= gridSize)
+    {
+        dest[i] = src[i];
     }
 }
 
@@ -59,6 +83,7 @@ void printHelp(void)
     printf("Options:\n");
     printf("--help\t\tDisplay this help menu\n");
     printf("--p2p_read\tUse P2P reads for data transfers between GPU pairs and show corresponding results.\n \t\tDefault used is P2P write operation.\n");
+    printf("--sm_copy\t\tUse SM intiated p2p transfers instead of Copy Engine\n");
 }
 
 void checkP2Paccess(int numGPUs)
@@ -77,6 +102,28 @@ void checkP2Paccess(int numGPUs)
         }
     }
     printf("\n***NOTE: In case a device doesn't have P2P access to other one, it falls back to normal memcopy procedure.\nSo you can see lesser Bandwidth (GB/s) and unstable Latency (us) in those cases.\n\n");
+}
+
+void performP2PCopy(int *dest, int destDevice, int *src, int srcDevice, int num_elems, int repeat, bool p2paccess, cudaStream_t streamToRun)
+{
+    int blockSize = 0;
+    int numBlocks = 0;
+
+    cudaOccupancyMaxPotentialBlockSize(&numBlocks, &blockSize, copyp2p);
+    cudaCheckError();
+
+    if (p2p_mechanism == SM && p2paccess)
+    {
+        for (int r = 0; r < repeat; r++) {
+            copyp2p<<<numBlocks, blockSize, 0, streamToRun>>>((int4*)dest, (int4*)src, num_elems/4);
+        }
+    }
+    else
+    {
+        for (int r = 0; r < repeat; r++) {
+            cudaMemcpyPeerAsync(dest, destDevice, src, srcDevice, sizeof(int)*num_elems, streamToRun);
+        }
+    }
 }
 
 void outputBandwidthMatrix(int numGPUs, bool p2p, P2PDataTransfer p2p_method)
@@ -112,7 +159,7 @@ void outputBandwidthMatrix(int numGPUs, bool p2p, P2PDataTransfer p2p_method)
         cudaSetDevice(i);
 
         for (int j = 0; j < numGPUs; j++) {
-            int access;
+            int access = 0;
             if (p2p) {
                 cudaDeviceCanAccessPeer(&access, i, j);
                 if (access) {
@@ -143,24 +190,17 @@ void outputBandwidthMatrix(int numGPUs, bool p2p, P2PDataTransfer p2p_method)
 
             if (i == j) {
                 // Perform intra-GPU, D2D copies
-                for (int r = 0; r < repeat; r++) {
-                    cudaMemcpyPeerAsync(buffers[i], i, buffersD2D[i], i, sizeof(int)*numElems, stream[i]);
-                }
+                performP2PCopy(buffers[i], i, buffersD2D[i], i, numElems, repeat, access, stream[i]);
+
             }
             else {
                 if (p2p_method == P2P_WRITE)
                 {
-                    for (int r = 0; r < repeat; r++) {
-                         // Perform P2P writes
-                        cudaMemcpyPeerAsync(buffers[j], j, buffers[i], i, sizeof(int)*numElems, stream[i]);
-                    }
+                    performP2PCopy(buffers[j], j, buffers[i], i, numElems, repeat, access, stream[i]);
                 }
                 else
                 {
-                    for (int r = 0; r < repeat; r++) {
-                        // Perform P2P reads
-                        cudaMemcpyPeerAsync(buffers[i], i, buffers[j], j, sizeof(int)*numElems, stream[i]);
-                    }
+                    performP2PCopy(buffers[i], i, buffers[j], j, numElems, repeat, access, stream[i]);
                 }
             }
 
@@ -262,7 +302,7 @@ void outputBidirectionalBandwidthMatrix(int numGPUs, bool p2p)
         cudaSetDevice(i);
 
         for (int j = 0; j < numGPUs; j++) {
-            int access;
+            int access = 0;
             if (p2p) {
                 cudaDeviceCanAccessPeer(&access, i, j);
                 if (access) {
@@ -299,16 +339,20 @@ void outputBidirectionalBandwidthMatrix(int numGPUs, bool p2p)
 
             if (i == j) {
                 // For intra-GPU perform 2 memcopies buffersD2D <-> buffers
-                for (int r = 0; r < repeat; r++) {
-                    cudaMemcpyPeerAsync(buffers[i], i, buffersD2D[i], i, sizeof(int)*numElems, stream0[i]);
-                    cudaMemcpyPeerAsync(buffersD2D[i], i, buffers[i], i, sizeof(int)*numElems, stream1[i]);
-                }
+                performP2PCopy(buffers[i], i, buffersD2D[i], i, numElems, repeat, access, stream0[i]);
+                performP2PCopy(buffersD2D[i], i, buffers[i], i, numElems, repeat, access, stream1[i]);
             }
             else {
-                for (int r = 0; r < repeat; r++) {
-                    cudaMemcpyPeerAsync(buffers[i], i, buffers[j], j, sizeof(int)*numElems, stream1[j]);
-                    cudaMemcpyPeerAsync(buffers[j], j, buffers[i], i, sizeof(int)*numElems, stream0[i]);
+                if (access && p2p_mechanism == SM)
+                {
+                    cudaSetDevice(j);
                 }
+                performP2PCopy(buffers[i], i, buffers[j], j, numElems, repeat, access, stream1[j]);
+                if (access && p2p_mechanism == SM)
+                {
+                    cudaSetDevice(i);
+                }
+                performP2PCopy(buffers[j], j, buffers[i], i, numElems, repeat, access, stream0[i]);
             }
 
             // Notify stream0 that stream1 is complete and record the time of
@@ -401,8 +445,8 @@ void outputLatencyMatrix(int numGPUs, bool p2p, P2PDataTransfer p2p_method)
     for (int d = 0; d < numGPUs; d++) {
         cudaSetDevice(d);
         cudaStreamCreateWithFlags(&stream[d], cudaStreamNonBlocking);
-        cudaMalloc(&buffers[d], 1);
-        cudaMalloc(&buffersD2D[d], 1);
+        cudaMalloc(&buffers[d], sizeof(int));
+        cudaMalloc(&buffersD2D[d], sizeof(int));
         cudaCheckError();
         cudaEventCreate(&start[d]);
         cudaCheckError();
@@ -417,7 +461,7 @@ void outputLatencyMatrix(int numGPUs, bool p2p, P2PDataTransfer p2p_method)
         cudaSetDevice(i);
 
         for (int j = 0; j < numGPUs; j++) {
-            int access;
+            int access = 0;
             if (p2p) {
                 cudaDeviceCanAccessPeer(&access, i, j);
                 if (access) {
@@ -445,24 +489,16 @@ void outputLatencyMatrix(int numGPUs, bool p2p, P2PDataTransfer p2p_method)
             sdkResetTimer(&stopWatch);
             if (i == j) {
                 // Perform intra-GPU, D2D copies
-                for (int r = 0; r < repeat; r++) {
-                    cudaMemcpyPeerAsync(buffers[i], i, buffersD2D[i], i, 1, stream[i]);
-                }
+                performP2PCopy(buffers[i], i, buffersD2D[i], i, 1, repeat, access, stream[i]);
             }
             else {
                 if (p2p_method == P2P_WRITE)
                 {
-                    for (int r = 0; r < repeat; r++) {
-                        // Peform P2P writes
-                        cudaMemcpyPeerAsync(buffers[j], j, buffers[i], i, 1, stream[i]);
-                    }
+                    performP2PCopy(buffers[j], j, buffers[i], i, 1, repeat, access, stream[i]);
                 }
                 else
                 {
-                    for (int r = 0; r < repeat; r++) {
-                        // Peform P2P reads
-                        cudaMemcpyPeerAsync(buffers[i], i, buffers[j], j, 1, stream[i]);
-                    }
+                    performP2PCopy(buffers[i], i, buffers[j], j, 1, repeat, access, stream[i]);
                 }
             }
             float cpu_time_ms = sdkGetTimerValue(&stopWatch);
@@ -561,6 +597,11 @@ int main(int argc, char **argv)
     if (checkCmdLineFlag(argc, (const char**)argv, "p2p_read"))
     {
         p2p_method = P2P_READ;
+    }
+
+    if (checkCmdLineFlag(argc, (const char**)argv, "sm_copy"))
+    {
+        p2p_mechanism = SM;
     }
 
     printf("[%s]\n", sSampleName);

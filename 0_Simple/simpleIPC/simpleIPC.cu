@@ -211,9 +211,9 @@ void runTestMultiKernel(ipcCUDA_t *s_mem, int index, ipcDevices_t* s_devices)
     {
         printf("\nLaunching kernels...\n");
         // host memory buffer for checking results
-        int *h_results = (int*)malloc(sizeof(int)*DATA_BUF_SIZE * s_devices->count * PROCESSES_PER_DEVICE);
+        int *h_results = (int*)malloc(sizeof(int)*DATA_BUF_SIZE * g_processCount);
 
-        cudaEvent_t *event = (cudaEvent_t*)malloc(sizeof(cudaEvent_t) * s_devices->count * PROCESSES_PER_DEVICE);
+        cudaEvent_t *event = (cudaEvent_t*)malloc(sizeof(cudaEvent_t) * g_processCount);
         checkCudaErrors(cudaMalloc((void **) &d_ptr, DATA_BUF_SIZE * g_processCount * sizeof(int)));
         checkCudaErrors(cudaIpcGetMemHandle((cudaIpcMemHandle_t *) &s_mem[0].memHandle, (void *) d_ptr));
         checkCudaErrors(cudaMemcpy((void *) d_ptr, (void *) h_refData, DATA_BUF_SIZE * sizeof(int), cudaMemcpyHostToDevice));

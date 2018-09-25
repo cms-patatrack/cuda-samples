@@ -50,6 +50,21 @@
 #include <helper_functions.h>
 #include <helper_cuda.h>
 
+// Externally configurable parameters.
+
+#ifndef CPU_DEBUG
+// Set this to 1 to verify the correctness of the GPU-computed matrix.
+#define CPU_DEBUG 0
+#endif
+
+#ifndef SHARED_MEMORY_LIMIT_64K
+// Set this to 0 to use more than 64 Kb of shared memory to cache data, to
+// improve the performance of the computations on GPU.
+// Note that you need a GPU that can have more than 64 Kb of shared memory
+// per multiprocessor.
+#define SHARED_MEMORY_LIMIT_64K 1
+#endif
+
 // GPU configuration.
 
 #define WARP_SIZE 32
@@ -59,6 +74,10 @@
 #define M 16
 #define N 16
 #define K 16
+
+#define WMMA_M 16
+#define WMMA_N 16
+#define WMMA_K 16
 
 // GEMM configuration.
 
@@ -77,7 +96,24 @@
 #define WARPS_PER_BLOCK 8
 #define THREADS_PER_BLOCK (WARP_SIZE * WARPS_PER_BLOCK)
 
+#if SHARED_MEMORY_LIMIT_64K
+// With only 64 Kb shared memory available, we can fit two 8-tile chunks of
+// the A and B matrix data, that are 16 * 16 * 8 * 8 * 2 = 32 Kb each
+// (i.e. two 8x8 arrays of tiles of 16x16 half-typed elements per CTA).
+// But we cannot account the 8 Kb total skew overhead, without which the performance
+// would be severely impacted. So we choose to reduce the chunk size in half,
+// i.e. the amount of A and B matrix data we cache in shared memory.
+// Accordingly, this doubles the number of outer iterations across the global K
+// dimension, which only slightly impacts the performance.
+#define CHUNK_K 4
+#else
 #define CHUNK_K 8
+#endif
+
+#define CHUNK_LINE_BYTES (CHUNK_K * K * sizeof(half))
+#define WARP_COPY_BYTES (WARP_SIZE * sizeof(int4))
+#define CHUNK_COPY_LINES_PER_WARP (WARP_COPY_BYTES / CHUNK_LINE_BYTES)
+#define CHUNK_COPY_LINE_LANES (WARP_SIZE / CHUNK_COPY_LINES_PER_WARP)
 
 #define BLOCK_ROW_WARPS 2
 #define BLOCK_COL_WARPS 4
@@ -134,7 +170,7 @@ __host__ void init_host_matrices(float *a, float *b, float *c)
     }
 
     for (int t = 0; t < M_GLOBAL * N_GLOBAL; t++) {
-        c[t] = (float)(rand() % 3);
+        c[t] =  (float)(rand() % 3);
     }
 }
 
@@ -246,19 +282,19 @@ __global__ void compute_gemm(const half *A, const half *B, const float *C, float
 
             // First half of the warp copies the first row / column of the matrix,
             // the second half of the warp copies the next.
-            int4 *lane_ptr = (int4*)(warp_ptr + tile_k * K + (laneId / (WARP_SIZE/2)) * K_GLOBAL) + (laneId % (WARP_SIZE/2));
+            int4 *lane_ptr = (int4*)(warp_ptr + tile_k * K + (laneId / CHUNK_COPY_LINE_LANES) * K_GLOBAL) + (laneId % CHUNK_COPY_LINE_LANES);
 
             // Shift the second half of the warp to the next row / column in the shared memory.
-            shmem_idx += laneId / (WARP_SIZE/2);
+            shmem_idx += laneId / CHUNK_COPY_LINE_LANES;
 
 #pragma unroll
-            for(int i = 0; i < (WARP_SIZE/2); i++) {
+            for(int i = 0; i < ((WARP_SIZE/2) / CHUNK_COPY_LINES_PER_WARP) * 2; i++) {
                 // Copy 16 bytes at once in each lane.
-                *((int4*)&shmem[shmem_idx][0] + (laneId % (WARP_SIZE/2))) = *lane_ptr;
+                *((int4*)&shmem[shmem_idx][0] + (laneId % CHUNK_COPY_LINE_LANES)) = *lane_ptr;
 
                 // Advance the global memory pointer and the shared memory index.
-                lane_ptr = (int4*)((half*)lane_ptr + K_GLOBAL * 2);
-                shmem_idx += 2;
+                lane_ptr = (int4*)((half*)lane_ptr + K_GLOBAL * CHUNK_COPY_LINES_PER_WARP);
+                shmem_idx += CHUNK_COPY_LINES_PER_WARP;
             }
 
             __syncthreads();
@@ -327,6 +363,88 @@ __global__ void compute_gemm(const half *A, const half *B, const float *C, float
     }
 }
 
+
+// Performs an MxNxK GEMM (C=alpha*A*B + beta*C) assuming:
+//  1) Matrices are packed in memory.
+//  2) M, N and K are multiples of 16. 
+//  3) Neither A nor B are transposed.
+// Note: This is a less performant version of the compute_gemm kernel. It is designed for
+//       demonstration purposes only to show the CUDA WMMA API use without relying on
+//       availability of the shared memory.
+__global__ void simple_wmma_gemm(half *a, half *b, float *c, float *d, int m_ld, int n_ld, int k_ld, float alpha, float beta)
+{
+   // Leading dimensions. Packed with no transpositions.
+   int lda = m_ld;
+   int ldb = k_ld;
+   int ldc = n_ld;
+
+   // Tile using a 2D grid
+   int warpM = (blockIdx.x * blockDim.x + threadIdx.x) / warpSize;
+   int warpN = (blockIdx.y * blockDim.y + threadIdx.y);
+ 
+   // Declare the fragments
+   wmma::fragment<wmma::matrix_a, WMMA_M, WMMA_N, WMMA_K, half, wmma::row_major> a_frag;
+   wmma::fragment<wmma::matrix_b, WMMA_M, WMMA_N, WMMA_K, half, wmma::col_major> b_frag;
+   wmma::fragment<wmma::accumulator, WMMA_M, WMMA_N, WMMA_K, float> acc_frag;
+   wmma::fragment<wmma::accumulator, WMMA_M, WMMA_N, WMMA_K, float> c_frag;
+
+   wmma::fill_fragment(acc_frag, 0.0f);
+
+   // Loop over k
+   for (int i = 0; i < k_ld; i += WMMA_K) {
+      int aCol = i; 
+      int aRow = warpM * WMMA_M;
+
+      int bCol = i;
+      int bRow = warpN * WMMA_N;
+
+      // Bounds checking
+      if (aRow < m_ld && aCol < k_ld && bRow < k_ld && bCol < n_ld) {
+         // Load the inputs
+         wmma::load_matrix_sync(a_frag, a + aCol + aRow * lda, lda);
+         wmma::load_matrix_sync(b_frag, b + bCol + bRow * ldb, ldb);
+ 
+         // Perform the matrix multiplication
+         wmma::mma_sync(acc_frag, a_frag, b_frag, acc_frag);
+
+      }
+   }
+
+   // Load in the current value of c, scale it by beta, and add this our result scaled by alpha
+   int cCol = warpN * WMMA_N;
+   int cRow = warpM * WMMA_M;
+
+   if (cRow < m_ld && cCol < n_ld) {
+      wmma::load_matrix_sync(c_frag, c + cCol + cRow * ldc, ldc, wmma::mem_row_major);
+
+      for(int i=0; i < c_frag.num_elements; i++) {
+         c_frag.x[i] = alpha * acc_frag.x[i] + beta * c_frag.x[i];
+      }
+
+      // Store the output
+      wmma::store_matrix_sync(d + cCol + cRow * ldc, c_frag, ldc, wmma::mem_row_major);
+   }
+}
+
+__host__ void matMultiplyOnHost(float *A, float *B, float *C,
+                                float alpha, float beta,
+                                int numARows, int numAColumns,
+                                int numBRows, int numBColumns,
+                                int numCRows, int numCColumns)
+{
+    for (int i = 0; i < numCRows; i++) {
+        for (int j = 0; j < numCColumns; j++) {
+            float temp = 0.0;
+
+            for (int k = 0; k < numAColumns; k++) {
+                temp += A[i * numAColumns + k] * B[j * numBRows + k];
+            }
+
+            C[i*numCColumns + j] = temp * alpha + beta * C[i * numCColumns + j];
+        }
+    }
+}
+
 int main(int argc, char **argv)
 {
     printf("Initializing...\n");
@@ -349,10 +467,18 @@ int main(int argc, char **argv)
     float *A_h = NULL;
     float *B_h = NULL;
     float *C_h = NULL;
+#if CPU_DEBUG
+    float *result_hD = NULL;
+    float *result_host = NULL;
+#endif
 
     checkCudaErrors(cudaMallocManaged((void**)&A_h, sizeof(float) * M_GLOBAL * K_GLOBAL));
     checkCudaErrors(cudaMallocManaged((void**)&B_h, sizeof(float) * K_GLOBAL * N_GLOBAL));
     checkCudaErrors(cudaMallocManaged((void**)&C_h, sizeof(float) * M_GLOBAL * N_GLOBAL));
+#if CPU_DEBUG
+    checkCudaErrors(cudaMallocManaged((void**)&result_hD, sizeof(float) * M_GLOBAL * N_GLOBAL));
+    checkCudaErrors(cudaMallocManaged((void**)&result_host, sizeof(float) * M_GLOBAL * N_GLOBAL));
+#endif
 
     half *A = NULL;
     half *B = NULL;
@@ -377,13 +503,19 @@ int main(int argc, char **argv)
 
     checkCudaErrors(cudaDeviceSynchronize());
 
-    enum { SHMEM_SZ = sizeof(half) * (BLOCK_COL_TILES * M) * (CHUNK_K * K + SKEW_HALF) * 2 };
+    enum {
+        // Compute the right amount of shared memory to request.
+        // We need shared memory to hold per-CTA C and D matrix tiles, and to cache per-CTA chunks
+        // of the A and B matrices. Therefore, the right amount to request is the maximum of those
+        // two numbers.
+        SHMEM_SZ = MAX(sizeof(half) * (BLOCK_COL_TILES * M) * (CHUNK_K * K + SKEW_HALF) * 2,
+                       M * (BLOCK_ROW_WARPS * WARP_ROW_TILES) * N * (BLOCK_COL_WARPS * WARP_COL_TILES) * sizeof(float))
+    };
 
     printf("Required shared memory size: %lu Kb\n", SHMEM_SZ / 1024UL);
 
-    checkCudaErrors(cudaFuncSetAttribute(compute_gemm, cudaFuncAttributeMaxDynamicSharedMemorySize, SHMEM_SZ));
-
-    printf("Computing...\n");
+    const float alpha = 1.1f;
+    const float beta = 1.2f;
 
     cudaEvent_t start, stop;
 
@@ -391,14 +523,57 @@ int main(int argc, char **argv)
     checkCudaErrors(cudaEventCreate(&stop));
     checkCudaErrors(cudaEventRecord(start));
 
-    const float alpha = 1.1f;
-    const float beta = 1.2f;
+    // If enough shared memory available on the GPU use high performant kernel
+    if (deviceProp.sharedMemPerMultiprocessor >= SHMEM_SZ)
+    {
+        printf("Computing... using high performance kernel compute_gemm \n");
 
-    checkKernelErrors((compute_gemm<<<deviceProp.multiProcessorCount, THREADS_PER_BLOCK, SHMEM_SZ>>>(A, B, C, D, alpha, beta)));
+        checkCudaErrors(cudaFuncSetAttribute(compute_gemm, cudaFuncAttributeMaxDynamicSharedMemorySize, SHMEM_SZ));
+        checkKernelErrors((compute_gemm<<<deviceProp.multiProcessorCount, THREADS_PER_BLOCK, SHMEM_SZ>>>(A, B, C, D, alpha, beta)));
+#if CPU_DEBUG
+        checkCudaErrors(cudaMemcpy(result_hD, D, sizeof(float)*M_GLOBAL*N_GLOBAL, cudaMemcpyDeviceToHost));
+#endif
+    }
+    else
+    {
+        dim3 gridDim;
+        dim3 blockDim;
+     
+        // blockDim.x must be a multple of warpSize
+        // 128x4 means we have 16 warps and a block computes a 64x64 output tile
+        blockDim.x = 128;
+        blockDim.y = 4;
+
+        gridDim.x = (M_GLOBAL + (WMMA_M * blockDim.x / 32 - 1)) / (WMMA_M * blockDim.x / 32);
+        gridDim.y = (N_GLOBAL + WMMA_N * blockDim.y - 1) / (WMMA_N * blockDim.y);
+
+        printf("Computing... using simple_wmma_gemm kernel\n");
+        simple_wmma_gemm<<<gridDim, blockDim>>>(A, B, C, D, M_GLOBAL, N_GLOBAL, K_GLOBAL, alpha, beta);
+#if CPU_DEBUG
+        checkCudaErrors(cudaMemcpy(result_hD, D, sizeof(float) * M_GLOBAL * N_GLOBAL, cudaMemcpyDeviceToHost));
+#endif
+    }
 
     checkCudaErrors(cudaEventRecord(stop));
     checkCudaErrors(cudaEventSynchronize(stop));
-    
+
+#if CPU_DEBUG
+    printf("Verifying correctness of the computations...\n");
+
+    memcpy(result_host, C_h, sizeof(float) * M_GLOBAL * N_GLOBAL);
+
+    matMultiplyOnHost(A_h, B_h, result_host,
+                      alpha, beta,
+                      M_GLOBAL, K_GLOBAL,
+                      K_GLOBAL, N_GLOBAL,
+                      M_GLOBAL, N_GLOBAL);
+
+    for (int i = 0; i < N_GLOBAL * M_GLOBAL; i++) {
+        if (fabs(result_hD[i] - result_host[i]) > 0.1f)
+            printf("mismatch i=%d result_hD=%f result_host=%f\n", i, result_hD[i], result_host[i]);
+    }
+#endif
+
     float milliseconds = 0;
 
     checkCudaErrors(cudaEventElapsedTime(&milliseconds, start, stop));

@@ -60,6 +60,7 @@
   <sm-arch>sm60</sm-arch>
   <sm-arch>sm61</sm-arch>
   <sm-arch>sm70</sm-arch>
+  <sm-arch>sm75</sm-arch>
   <sources>
     <ignore>graphics_interface_egloutput_via_egl.c</ignore>
   </sources>

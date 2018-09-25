@@ -255,66 +255,21 @@ reduce4(T *g_idata, T *g_odata, unsigned int n)
         cg::sync(cta);
     }
 
-#if (__CUDA_ARCH__ >= 300 )
-    if ( tid < 32 )
-    {
-        cg::coalesced_group active = cg::coalesced_threads();
+    cg::thread_block_tile<32> tile32 = cg::tiled_partition<32>(cta);
 
+    if (cta.thread_rank() < 32)
+    {
         // Fetch final intermediate sum from 2nd warp
         if (blockSize >=  64) mySum += sdata[tid + 32];
         // Reduce final warp using shuffle
-        for (int offset = warpSize/2; offset > 0; offset /= 2) 
+        for (int offset = tile32.size()/2; offset > 0; offset /= 2) 
         {
-            mySum += active.shfl_down(mySum, offset);
+             mySum += tile32.shfl_down(mySum, offset);
         }
     }
-#else
-    // fully unroll reduction within a single warp
-    if ((blockSize >=  64) && (tid < 32))
-    {
-        sdata[tid] = mySum = mySum + sdata[tid + 32];
-    }
-
-    cg::sync(cta);
-
-    if ((blockSize >=  32) && (tid < 16))
-    {
-        sdata[tid] = mySum = mySum + sdata[tid + 16];
-    }
-
-    cg::sync(cta);
-
-    if ((blockSize >=  16) && (tid <  8))
-    {
-        sdata[tid] = mySum = mySum + sdata[tid +  8];
-    }
-
-    cg::sync(cta);
-
-    if ((blockSize >=   8) && (tid <  4))
-    {
-        sdata[tid] = mySum = mySum + sdata[tid +  4];
-    }
-
-    cg::sync(cta);
-
-    if ((blockSize >=   4) && (tid <  2))
-    {
-        sdata[tid] = mySum = mySum + sdata[tid +  2];
-    }
-
-    cg::sync(cta);
-
-    if ((blockSize >=   2) && ( tid <  1))
-    {
-        sdata[tid] = mySum = mySum + sdata[tid +  1];
-    }
-
-    cg::sync(cta);
-#endif
 
     // write result for this block to global mem
-    if (tid == 0) g_odata[blockIdx.x] = mySum;
+    if (cta.thread_rank() == 0) g_odata[blockIdx.x] = mySum;
 }
 
 /*
@@ -371,66 +326,21 @@ reduce5(T *g_idata, T *g_odata, unsigned int n)
 
     cg::sync(cta);
 
-#if (__CUDA_ARCH__ >= 300 )
-    if ( tid < 32 )
-    {
-        cg::coalesced_group active = cg::coalesced_threads();
+    cg::thread_block_tile<32> tile32 = cg::tiled_partition<32>(cta);
 
+    if (cta.thread_rank() < 32)
+    {
         // Fetch final intermediate sum from 2nd warp
         if (blockSize >=  64) mySum += sdata[tid + 32];
         // Reduce final warp using shuffle
-        for (int offset = warpSize/2; offset > 0; offset /= 2) 
+        for (int offset = tile32.size()/2; offset > 0; offset /= 2) 
         {
-            mySum += active.shfl_down(mySum, offset);
+             mySum += tile32.shfl_down(mySum, offset);
         }
     }
-#else
-    // fully unroll reduction within a single warp
-    if ((blockSize >=  64) && (tid < 32))
-    {
-        sdata[tid] = mySum = mySum + sdata[tid + 32];
-    }
-
-    cg::sync(cta);
-
-    if ((blockSize >=  32) && (tid < 16))
-    {
-        sdata[tid] = mySum = mySum + sdata[tid + 16];
-    }
-
-    cg::sync(cta);
-
-    if ((blockSize >=  16) && (tid <  8))
-    {
-        sdata[tid] = mySum = mySum + sdata[tid +  8];
-    }
-
-    cg::sync(cta);
-
-    if ((blockSize >=   8) && (tid <  4))
-    {
-        sdata[tid] = mySum = mySum + sdata[tid +  4];
-    }
-
-    cg::sync(cta);
-
-    if ((blockSize >=   4) && (tid <  2))
-    {
-        sdata[tid] = mySum = mySum + sdata[tid +  2];
-    }
-
-    cg::sync(cta);
-
-    if ((blockSize >=   2) && ( tid <  1))
-    {
-        sdata[tid] = mySum = mySum + sdata[tid +  1];
-    }
-
-    cg::sync(cta);
-#endif
 
     // write result for this block to global mem
-    if (tid == 0) g_odata[blockIdx.x] = mySum;
+    if (cta.thread_rank() == 0) g_odata[blockIdx.x] = mySum;
 }
 
 /*
@@ -499,66 +409,21 @@ reduce6(T *g_idata, T *g_odata, unsigned int n)
 
     cg::sync(cta);
 
-#if (__CUDA_ARCH__ >= 300 )
-    if ( tid < 32 )
-    {
-        cg::coalesced_group active = cg::coalesced_threads();
+    cg::thread_block_tile<32> tile32 = cg::tiled_partition<32>(cta);
 
+    if (cta.thread_rank() < 32)
+    {
         // Fetch final intermediate sum from 2nd warp
         if (blockSize >=  64) mySum += sdata[tid + 32];
         // Reduce final warp using shuffle
-        for (int offset = warpSize/2; offset > 0; offset /= 2) 
+        for (int offset = tile32.size()/2; offset > 0; offset /= 2) 
         {
-             mySum += active.shfl_down(mySum, offset);
+             mySum += tile32.shfl_down(mySum, offset);
         }
     }
-#else
-    // fully unroll reduction within a single warp
-    if ((blockSize >=  64) && (tid < 32))
-    {
-        sdata[tid] = mySum = mySum + sdata[tid + 32];
-    }
-
-    cg::sync(cta);
-
-    if ((blockSize >=  32) && (tid < 16))
-    {
-        sdata[tid] = mySum = mySum + sdata[tid + 16];
-    }
-
-    cg::sync(cta);
-
-    if ((blockSize >=  16) && (tid <  8))
-    {
-        sdata[tid] = mySum = mySum + sdata[tid +  8];
-    }
-
-    cg::sync(cta);
-
-    if ((blockSize >=   8) && (tid <  4))
-    {
-        sdata[tid] = mySum = mySum + sdata[tid +  4];
-    }
-
-    cg::sync(cta);
-
-    if ((blockSize >=   4) && (tid <  2))
-    {
-        sdata[tid] = mySum = mySum + sdata[tid +  2];
-    }
-
-    cg::sync(cta);
-
-    if ((blockSize >=   2) && ( tid <  1))
-    {
-        sdata[tid] = mySum = mySum + sdata[tid +  1];
-    }
-
-    cg::sync(cta);
-#endif
 
     // write result for this block to global mem
-    if (tid == 0) g_odata[blockIdx.x] = mySum;
+    if (cta.thread_rank() == 0) g_odata[blockIdx.x] = mySum;
 }
 
 

@@ -106,18 +106,19 @@ inline int _ConvertSMVer2CoresDRV(int major, int minor) {
   } sSMtoCores;
 
   sSMtoCores nGpuArchCoresPerSM[] = {
-      {0x30, 192},  // Kepler Generation (SM 3.0) GK10x class
-      {0x32, 192},  // Kepler Generation (SM 3.2) GK10x class
-      {0x35, 192},  // Kepler Generation (SM 3.5) GK11x class
-      {0x37, 192},  // Kepler Generation (SM 3.7) GK21x class
-      {0x50, 128},  // Maxwell Generation (SM 5.0) GM10x class
-      {0x52, 128},  // Maxwell Generation (SM 5.2) GM20x class
-      {0x53, 128},  // Maxwell Generation (SM 5.3) GM20x class
-      {0x60, 64},   // Pascal Generation (SM 6.0) GP100 class
-      {0x61, 128},  // Pascal Generation (SM 6.1) GP10x class
-      {0x62, 128},  // Pascal Generation (SM 6.2) GP10x class
-      {0x70, 64},   // Volta Generation (SM 7.0) GV100 class
-      {0x72, 64},   // Volta Generation (SM 7.2) GV11b class
+      {0x30, 192},
+      {0x32, 192},
+      {0x35, 192},
+      {0x37, 192},
+      {0x50, 128},
+      {0x52, 128},
+      {0x53, 128},
+      {0x60,  64},
+      {0x61, 128},
+      {0x62, 128},
+      {0x70,  64},
+      {0x72,  64},
+      {0x75,  64},
       {-1, -1}};
 
   int index = 0;
@@ -201,7 +202,6 @@ inline int gpuGetMaxGflopsDeviceIdDRV() {
   int device_count = 0;
   int sm_per_multiproc = 0;
   unsigned long long max_compute_perf = 0;
-  int best_SM_arch = 0;
   int major = 0;
   int minor = 0;
   int multiProcessorCount;
@@ -215,19 +215,6 @@ inline int gpuGetMaxGflopsDeviceIdDRV() {
     fprintf(stderr,
             "gpuGetMaxGflopsDeviceIdDRV error: no devices supporting CUDA\n");
     exit(EXIT_FAILURE);
-  }
-
-  // Find the best major SM Architecture GPU device
-  while (current_device < device_count) {
-    checkCudaErrors(cuDeviceGetAttribute(
-        &major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, current_device));
-    checkCudaErrors(cuDeviceGetAttribute(
-        &minor, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, current_device));
-    if (major > 0 && major < 9999) {
-      best_SM_arch = MAX(best_SM_arch, major);
-    }
-
-    current_device++;
   }
 
   // Find the best CUDA capable GPU device
@@ -260,17 +247,8 @@ inline int gpuGetMaxGflopsDeviceIdDRV() {
                                clockRate);
 
       if (compute_perf > max_compute_perf) {
-        // If we find GPU with SM major > 2, search only these
-        if (best_SM_arch > 2) {
-          // If our device==dest_SM_arch, choose this, or else pass
-          if (major == best_SM_arch) {
-            max_compute_perf = compute_perf;
-            max_perf_device = current_device;
-          }
-        } else {
           max_compute_perf = compute_perf;
           max_perf_device = current_device;
-        }
       }
     } else {
       devices_prohibited++;

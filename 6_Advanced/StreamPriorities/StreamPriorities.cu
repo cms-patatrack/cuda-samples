@@ -13,7 +13,6 @@
 #include <cstdio>
 
 // CUDA-C includes
-#include <cuda.h>
 #include <cuda_runtime.h>
 
 #include <helper_cuda.h>

@@ -49,17 +49,6 @@
 
 #include <vector_types.h>
 
-void checkCUDAError()
-{
-    cudaError_t res = cudaGetLastError();
-    if (res != cudaSuccess)
-    {
-        fprintf(stderr, "Line %d: CUDA Error (%d): %s\n", __LINE__, res, cudaGetErrorString(res));
-        cudaThreadExit();
-        exit(1);
-    }
-}
-
 #define MAX_EPSILON_ERROR 0.0f
 #define THRESHOLD          0.0f
 #define REFRESH_DELAY     1 //ms
@@ -434,8 +423,7 @@ static void InitGraphicsState(void)
     glVertexAttribPointer((GLuint)0, 4, GL_FLOAT, GL_FALSE, 0, 0);
     glEnableVertexAttribArray(0); 
 
-    cudaGraphicsGLRegisterBuffer(&cuda_vbo_resource, mesh_vbo, cudaGraphicsMapFlagsNone);
-    checkCUDAError(); 
+    checkCudaErrors(cudaGraphicsGLRegisterBuffer(&cuda_vbo_resource, mesh_vbo, cudaGraphicsMapFlagsNone));
 
     // GLSL stuff
     char *vertex_shader_path = sdkFindFilePath("mesh.vert.glsl", pArgv[0]);
@@ -466,7 +454,14 @@ bool runTest(int argc, char **argv, char *ref_file)
     if (ref_file != NULL)
     {
         // This will pick the best possible CUDA capable device
+        //int devID = findCudaDevice(argc, (const char **)argv);
+#if defined (__aarch64__) || defined(__arm__)
+        // find iGPU on the system which is compute capable which will perform GLES-CUDA interop
+        int devID = findIntegratedGPU();
+#else
+        // use command-line specified CUDA device, otherwise use device with highest Gflops/s
         int devID = findCudaDevice(argc, (const char **)argv);
+#endif
 
         // create VBO
         checkCudaErrors(cudaMalloc((void **)&d_vbo_buffer, mesh_width*mesh_height*4*sizeof(float)));
@@ -520,6 +515,13 @@ bool runTest(int argc, char **argv, char *ref_file)
         // create QNX screen window and set up associated OpenGL ES context
         graphics_setup_window(0,0, window_width, window_height, sSDKsample, dispno);
 
+#if defined (__aarch64__) || defined(__arm__)
+        // find iGPU on the system which is compute capable which will perform GLES-CUDA interop
+        int devID = findIntegratedGPU();
+#else
+        // use command-line specified CUDA device, otherwise use device with highest Gflops/s
+        int devID = findCudaDevice(argc, (const char **)argv);
+#endif
         InitGraphicsState(); // set up GLES stuff
 
         glClearColor( 0, 0.5, 1, 1 ); // blue-ish background

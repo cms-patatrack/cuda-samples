@@ -42,7 +42,6 @@ FILTER_OUT :=
 
 ifeq ($(TARGET_ARCH),ppc64le)
 FILTER_OUT += 2_Graphics/simpleGLES_screen/Makefile
-FILTER_OUT += 3_Imaging/cudaDecodeGL/Makefile
 FILTER_OUT += 5_Simulations/nbody_screen/Makefile
 endif
 

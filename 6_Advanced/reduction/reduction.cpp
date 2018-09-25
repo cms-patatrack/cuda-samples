@@ -273,8 +273,6 @@ T benchmarkReduce(int  n,
 
         // check if kernel execution generated an error
         getLastCudaError("Kernel execution failed");
-        // Clear d_idata for later use as temporary buffer.
-        cudaMemset(d_idata, 0, n*sizeof(T));
 
         if (cpuFinalReduction)
         {
@@ -291,6 +289,9 @@ T benchmarkReduce(int  n,
         }
         else
         {
+            // Clear d_idata for later use as temporary buffer.
+            cudaMemset(d_idata, 0, n*sizeof(T));
+
             // sum partial block sums on GPU
             int s=numBlocks;
             int kernel = whichKernel;
