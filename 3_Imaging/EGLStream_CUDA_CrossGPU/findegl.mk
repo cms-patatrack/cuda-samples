@@ -125,3 +125,28 @@ ifeq ("$(TARGET_OS)","linux")
 else
 endif
 
+# Attempt to compile a minimal EGL application and run to check if EGL_SUPPORT_REUSE_NV is supported in the EGL headers available.
+ifneq ($(SAMPLE_ENABLED), 0)
+      $(shell printf "#include <EGL/egl.h>\n#include <EGL/eglext.h>\nint main() {\n#ifdef EGL_SUPPORT_REUSE_NV \n #pragma message(\"Compatible EGL header found\") \n  return 0;\n#endif \n return 1;\n}"  > test.c; )
+      EGL_DEFINES := $(shell $(HOST_COMPILER) $(CCFLAGS) $(EXTRA_CCFLAGS) $(LDFLAGS) $(EXTRA_LDFLAGS) -lEGL test.c 2>&1 | grep -ic "Compatible EGL header found";)
+      EXE_EXISTS := $(shell find a.out 2>/dev/null)
+      SHOULD_WAIVE := 0
+      ifeq ($(EGL_DEFINES),0)
+        SHOULD_WAIVE := 1
+      endif
+      ifeq (,$(EXE_EXISTS))
+        SHOULD_WAIVE := 1
+      endif
+      ifeq ($(SHOULD_WAIVE),1)
+          $(info -----------------------------------------------------------------------------------------------)
+          $(info WARNING - NVIDIA EGL EXTENSIONS are not available in the present EGL headers)
+          $(info -----------------------------------------------------------------------------------------------)
+          $(info   This CUDA Sample cannot be built if the EGL NVIDIA EXTENSIONS like EGL_SUPPORT_REUSE_NV are not supported in EGL headers.)
+          $(info   This will be a dry-run of the Makefile.)
+          $(info   Please install the latest khronos EGL headers and libs to build this sample)
+          $(info -----------------------------------------------------------------------------------------------)
+          SAMPLE_ENABLED := 0
+      endif
+      $(shell rm a.out test.c 2>/dev/null)
+endif
+

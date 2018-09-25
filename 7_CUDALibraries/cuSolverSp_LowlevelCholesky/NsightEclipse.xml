@@ -20,7 +20,6 @@
   <keywords>
     <keyword>CUSOLVER</keyword>
     <keyword>Linear Algebra</keyword>
-    <keyword>openMP</keyword>
   </keywords>
   <libraries>
     <library>cusolver</library>
@@ -44,6 +43,7 @@
   <sm-arch>sm50</sm-arch>
   <sm-arch>sm52</sm-arch>
   <sm-arch>sm60</sm-arch>
+  <sm-arch>sm61</sm-arch>
   <sm-arch>sm70</sm-arch>
   <supported_envs>
     <env>
@@ -60,6 +60,9 @@
     <env>
       <arch>ppc64le</arch>
       <platform>linux</platform>
+    </env>
+    <env>
+      <arch>arm</arch>
     </env>
   </supported_envs>
   <supported_sm_architectures>

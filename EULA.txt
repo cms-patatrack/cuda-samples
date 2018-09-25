@@ -1038,13 +1038,11 @@ Component : CUDA Accelerated Graph Library
   Linux   : libnvgraph.so, libnvgraph_static.a
   Android : libnvgraph.so, libnvgraph_static.a
 
-
-
 Component : NVIDIA Performance Primitives Library
-  Windows : nppc.dll, nppc.lib, nppial.dll, nppial.lib, nppicc.dll, nppicc.lib, nppicom.dll, nppicom.lib, nppidei.dll, nppidei.lib, nppif.dll, nppif.lib, nppig.dll, nppig.lib, nppim.dll, nppim.lib, nppist.dll, nppist.lib, nppisu.dll, nppisu.lib, nppitc.dll, nppitc.lib, npps.dll, npps.lib
-  Mac OSX : libnppc.dylib, libnppc_static.a, libnppial.dylib, libnppial_static.a, libnppicc.dylib, libnppicc_static.a, libnppicom.dylib, libnppicom_static.a, libnppidei.dylib, libnppidei_static.a, libnppif.dylib, libnppif_static.a, libnppig.dylib, libnppig_static.a, libnppim.dylib, libnppim_static.a, libnppist.dylib, libnppist_static.a, libnppisu.dylib, libnppisu_static.a, libnppitc.dylib, libnppitc_static.a, libnpps.dylib, libnpps_static.a
-  Linux   : libnppc.so, libnppc_static.a, libnppial.so, libnppial_static.a, libnppicc.so, libnppicc_static.a, libnppicom.so, libnppicom_static.a, libnppidei.so, libnppidei_static.a, libnppif.so, libnppif_static.a, libnppig.so, libnppig_static.a, libnppim.so, libnppim_static.a, libnppist.so, libnppist_static.a, libnppisu.so, libnppisu_static.a, libnppitc.so, libnppitc_static.a, libnpps.so, libnpps_static.a
-  Android : libnppc.so, libnppc_static.a, libnppial.so, libnppial_static.a, libnppicc.so, libnppicc_static.a, libnppicom.so, libnppicom_static.a, libnppidei.so, libnppidei_static.a, libnppif.so, libnppif_static.a, libnppig.so, libnppig_static.a, libnppim.so, libnppim_static.a, libnppist.so, libnppist_static.a, libnppisu.so, libnppisu_static.a, libnppitc.so, libnppitc_static.a, libnpps.so, libnpps_static.a
+  Windows : nppc.dll, nppi.dll, npps.dll, nppc.lib, nppi.lib, npps.lib
+  Mac OSX : libnppc.dylib, libnppi.dylib, libnpps.dylib, libnppc_static.a, libnpps_static.a, libnppi_static.a
+  Linux   : libnppc.so, libnppi.so, libnpps.so, libnppc_static.a, libnpps_static.a, libnppi_static.a
+  Android : libnppc.so, libnppi.so, libnpps.so, libnppc_static.a, libnpps_static.a, libnppi_static.a
 
 Component : Internal common library required for statically linking to cuBLAS, cuSPARSE, cuFFT, cuRAND and NPP
   Mac OSX : libculibos.a
@@ -1061,14 +1059,14 @@ Component : NVIDIA Optimizing Compiler Library
   Linux   : libnvvm.so
 
 Component : NVIDIA Common Device Math Functions Library
-  Windows : libdevice.compute_20.bc, libdevice.compute_30.bc, libdevice.compute_35.bc, libdevice.compute_50.bc
-  Mac OSX : libdevice.compute_20.bc, libdevice.compute_30.bc, libdevice.compute_35.bc, libdevice.compute_50.bc
-  Linux   : libdevice.compute_20.bc, libdevice.compute_30.bc, libdevice.compute_35.bc, libdevice.compute_50.bc
+  Windows : libdevice.10.bc
+  Mac OSX : libdevice.10.bc
+  Linux   : libdevice.10.bc
 
 Component : CUDA Occupancy Calculation Header Library
   All     : cuda_occupancy.h
 
-Component : Profiling Tools Interface Library
+Component : CUDA Profiling Tools Interface (CUPTI) Library
   Windows : cupti.dll
   Mac OSX : libcupti.dylib
   Linux   : libcupti.so
@@ -1695,29 +1693,5 @@ conditions:
     LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
     THE SOFTWARE.   
-
-  19. Licensee's use of the Visual Studio Setup Configuration
-    Samples is subject to the following license:
-
-    The MIT License (MIT) 
-    Copyright (C) Microsoft Corporation. All rights reserved.
-    
-    Permission is hereby granted, free of charge, to any person 
-    obtaining a copy of this software and associated documentation 
-    files (the "Software"), to deal in the Software without restriction, 
-    including without limitation the rights to use, copy, modify, merge, 
-    publish, distribute, sublicense, and/or sell copies of the Software, 
-    and to permit persons to whom the Software is furnished to do so, 
-    subject to the following conditions:
-    
-    The above copyright notice and this permission notice shall be included 
-    in all copies or substantial portions of the Software.
-    
-    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS 
-    OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
-    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
-    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
-    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
-    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.  
 
 -----------------

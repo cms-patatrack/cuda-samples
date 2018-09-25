@@ -219,43 +219,7 @@ ALL_CCFLAGS += $(EXTRA_NVCCFLAGS)
 ALL_CCFLAGS += $(addprefix -Xcompiler ,$(CCFLAGS))
 ALL_CCFLAGS += $(addprefix -Xcompiler ,$(EXTRA_CCFLAGS))
 
-UBUNTU = $(shell lsb_release -i -s 2>/dev/null | grep -i ubuntu)
-
 SAMPLE_ENABLED := 1
-
-# This sample is not supported on ARMv7
-ifeq ($(TARGET_ARCH),armv7l)
-  $(info >>> WARNING - cuSolverRf is not supported on ARMv7 - waiving sample <<<)
-  SAMPLE_ENABLED := 0
-endif
-
-# This sample is not supported on aarch64
-ifeq ($(TARGET_ARCH),aarch64)
-  $(info >>> WARNING - cuSolverRf is not supported on aarch64 - waiving sample <<<)
-  SAMPLE_ENABLED := 0
-endif
-
-# Attempt to compile a minimal OpenMP application. If a.out exists, OpenMP is properly set up.
-ifneq ($(TARGET_OS),darwin)
-LIBRARIES += -lgomp
-ALL_CCFLAGS += -Xcompiler -fopenmp
-$(shell echo "#include <omp.h>" > test.c ; echo "int main() { omp_get_num_threads(); return 0; }" >> test.c ; $(HOST_COMPILER) -fopenmp test.c)
-OPENMP ?= $(shell find a.out 2>/dev/null)
-
-ifeq ($(OPENMP),)
-      $(info -----------------------------------------------------------------------------------------------)
-      $(info WARNING - OpenMP is unable to compile)
-      $(info -----------------------------------------------------------------------------------------------)
-      $(info   This CUDA Sample cannot be built if the OpenMP compiler is not set up correctly.)
-      $(info   This will be a dry-run of the Makefile.)
-      $(info   For more information on how to set up your environment to build and run this )
-      $(info   sample, please refer the CUDA Samples documentation and release notes)
-      $(info -----------------------------------------------------------------------------------------------)
-      SAMPLE_ENABLED := 0
-endif
-
-$(shell rm a.out test.c 2>/dev/null)
-endif
 
 ifeq ($(TARGET_OS),linux)
 ALL_CCFLAGS += -Xcompiler \"-Wl,--no-as-needed\"
@@ -273,7 +237,7 @@ LIBRARIES :=
 ################################################################################
 
 # Gencode arguments
-SMS ?= 30 35 37 50 52 60 70
+SMS ?= 30 35 37 50 52 60 61 70
 
 ifeq ($(SMS),)
 $(info >>> WARNING - no SM architectures have been specified - waiving sample <<<)

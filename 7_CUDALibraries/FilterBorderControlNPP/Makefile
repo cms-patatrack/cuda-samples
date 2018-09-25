@@ -253,7 +253,7 @@ endif
 
 INCLUDES += -I../common/UtilNPP -I../common/FreeImage/include
 
-LIBRARIES += -L../common/FreeImage/lib/ -L../common/FreeImage/lib/$(TARGET_OS) -L../common/FreeImage/lib/$(TARGET_OS)/$(TARGET_ARCH) -lnppisu_static -lnppif_static -lnppitc_static -lnppidei_static -lnppial_static -lnppc_static -lculibos -lfreeimage
+LIBRARIES += -L../common/FreeImage/lib/x64 -L../common/FreeImage/lib/$(TARGET_OS) -L../common/FreeImage/lib/$(TARGET_OS)/$(TARGET_ARCH) -lnppisu_static -lnppif_static -lnppitc_static -lnppidei_static -lnppial_static -lnppc_static -lculibos -lfreeimage
 
 # Attempt to compile a minimal application linked against FreeImage. If a.out exists, FreeImage is properly set up.
 $(shell echo "#include \"FreeImage.h\"" > test.c; echo "int main() { return 0; }" >> test.c ; $(NVCC) $(ALL_CCFLAGS) $(INCLUDES) $(LIBRARIES) -l freeimage test.c)

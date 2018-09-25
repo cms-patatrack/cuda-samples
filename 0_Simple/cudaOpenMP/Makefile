@@ -229,8 +229,19 @@ ifeq ($(TARGET_OS),darwin)
   SAMPLE_ENABLED := 0
 endif
 
+ALL_LDFLAGS :=
+ALL_LDFLAGS += $(ALL_CCFLAGS)
+ALL_LDFLAGS += $(addprefix -Xlinker ,$(LDFLAGS))
+ALL_LDFLAGS += $(addprefix -Xlinker ,$(EXTRA_LDFLAGS))
+
+# Common includes and paths for CUDA
+INCLUDES  := -I../../common/inc
+LIBRARIES :=
+
+################################################################################
+
 # Attempt to compile a minimal OpenMP application. If a.out exists, OpenMP is properly set up.
-ifneq ($(TARGET_OS),darwin)
+ifneq (,$(filter $(TARGET_OS),linux android))
 LIBRARIES += -lgomp
 ALL_CCFLAGS += -Xcompiler -fopenmp
 $(shell echo "#include <omp.h>" > test.c ; echo "int main() { omp_get_num_threads(); return 0; }" >> test.c ; $(HOST_COMPILER) -fopenmp test.c)
@@ -251,19 +262,8 @@ endif
 $(shell rm a.out test.c 2>/dev/null)
 endif
 
-ALL_LDFLAGS :=
-ALL_LDFLAGS += $(ALL_CCFLAGS)
-ALL_LDFLAGS += $(addprefix -Xlinker ,$(LDFLAGS))
-ALL_LDFLAGS += $(addprefix -Xlinker ,$(EXTRA_LDFLAGS))
-
-# Common includes and paths for CUDA
-INCLUDES  := -I../../common/inc
-LIBRARIES :=
-
-################################################################################
-
 # Gencode arguments
-SMS ?= 30 35 37 50 52 60 70
+SMS ?= 30 35 37 50 52 60 61 70
 
 ifeq ($(SMS),)
 $(info >>> WARNING - no SM architectures have been specified - waiving sample <<<)
