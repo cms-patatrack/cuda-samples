@@ -18,7 +18,6 @@
 #include <cstdlib>
 #include <vector>
 #include <algorithm>
-#include <GL/glew.h>
 
 #include <cuda_gl_interop.h>
 

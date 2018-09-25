@@ -74,10 +74,16 @@ endif
 # architecture
 HOST_ARCH   := $(shell uname -m)
 TARGET_ARCH ?= $(HOST_ARCH)
-ifneq (,$(filter $(TARGET_ARCH),x86_64 aarch64 ppc64le))
-    TARGET_SIZE := 64
-else ifeq ($(TARGET_ARCH),armv7l)
-    TARGET_SIZE := 32
+ifneq (,$(filter $(TARGET_ARCH),x86_64 aarch64 ppc64le armv7l))
+    ifneq ($(TARGET_ARCH),$(HOST_ARCH))
+        ifneq (,$(filter $(TARGET_ARCH),x86_64 aarch64 ppc64le))
+            TARGET_SIZE := 64
+        else ifneq (,$(filter $(TARGET_ARCH),armv7l))
+            TARGET_SIZE := 32
+        endif
+    else
+        TARGET_SIZE := $(shell getconf LONG_BIT)
+    endif
 else
     $(error ERROR - unsupported value $(TARGET_ARCH) for TARGET_ARCH!)
 endif
@@ -85,6 +91,11 @@ ifneq ($(TARGET_ARCH),$(HOST_ARCH))
     ifeq (,$(filter $(HOST_ARCH)-$(TARGET_ARCH),aarch64-armv7l x86_64-armv7l x86_64-aarch64 x86_64-ppc64le))
         $(error ERROR - cross compiling from $(HOST_ARCH) to $(TARGET_ARCH) is not supported!)
     endif
+endif
+
+# When on native aarch64 system with userspace of 32-bit, change TARGET_ARCH to armv7l
+ifeq ($(HOST_ARCH)-$(TARGET_ARCH)-$(TARGET_SIZE),aarch64-aarch64-32)
+    TARGET_ARCH = armv7l
 endif
 
 # operating system
@@ -119,6 +130,16 @@ else ifneq ($(TARGET_ARCH),$(HOST_ARCH))
     else ifeq ($(TARGET_ARCH),aarch64)
         ifeq ($(TARGET_OS), linux)
             HOST_COMPILER ?= aarch64-linux-gnu-g++
+        else ifeq ($(TARGET_OS),qnx)
+            ifeq ($(QNX_HOST),)
+                $(error ERROR - QNX_HOST must be passed to the QNX host toolchain)
+            endif
+            ifeq ($(QNX_TARGET),)
+                $(error ERROR - QNX_TARGET must be passed to the QNX target toolchain)
+            endif
+            export QNX_HOST
+            export QNX_TARGET
+            HOST_COMPILER ?= $(QNX_HOST)/usr/bin/aarch64-unknown-nto-qnx7.0.0-g++
         else ifeq ($(TARGET_OS), android)
             HOST_COMPILER ?= aarch64-linux-android-g++
         endif
@@ -186,19 +207,17 @@ LIBRARIES :=
 
 ################################################################################
 
-SAMPLE_ENABLED := 1
-
 # Gencode arguments
-SMS ?= 20 30 35 37 50 52
-
-ifeq ($(SMS),)
-$(info >>> WARNING - no SM architectures have been specified - waiving sample <<<)
-SAMPLE_ENABLED := 0
-endif
+SMS ?=
 
 ifeq ($(GENCODE_FLAGS),)
 # Generate SASS code for each SM architecture listed in $(SMS)
 $(foreach sm,$(SMS),$(eval GENCODE_FLAGS += -gencode arch=compute_$(sm),code=sm_$(sm)))
+
+ifeq ($(SMS),)
+# Generate PTX code from SM 20
+GENCODE_FLAGS += -gencode arch=compute_20,code=compute_20
+endif
 
 # Generate PTX code from the highest SM architecture in $(SMS) to guarantee forward-compatibility
 HIGHEST_SM := $(lastword $(sort $(SMS)))
@@ -207,37 +226,28 @@ GENCODE_FLAGS += -gencode arch=compute_$(HIGHEST_SM),code=compute_$(HIGHEST_SM)
 endif
 endif
 
-ifeq ($(SAMPLE_ENABLED),0)
-EXEC ?= @echo "[@]"
-endif
+LIBRARIES += -lcublas
 
 ################################################################################
 
 # Target rules
 all: build
 
-build: template_runtime
+build: simpleCUBLASXT
 
-check.deps:
-ifeq ($(SAMPLE_ENABLED),0)
-	@echo "Sample will be waived due to the above missing dependencies"
-else
-	@echo "Sample is ready - all dependencies have been met"
-endif
+simpleCUBLASXT.o:simpleCUBLASXT.cpp
+	$(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
 
-template_runtime.o:template_runtime.cu
-	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
-
-template_runtime: template_runtime.o
-	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
-	$(EXEC) mkdir -p ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
-	$(EXEC) cp $@ ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
+simpleCUBLASXT: simpleCUBLASXT.o
+	$(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
+	mkdir -p ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
+	cp $@ ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
 
 run: build
-	$(EXEC) ./template_runtime
+	./simpleCUBLASXT
 
 clean:
-	rm -f template_runtime template_runtime.o
-	rm -rf ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)/template_runtime
+	rm -f simpleCUBLASXT simpleCUBLASXT.o
+	rm -rf ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)/simpleCUBLASXT
 
 clobber: clean

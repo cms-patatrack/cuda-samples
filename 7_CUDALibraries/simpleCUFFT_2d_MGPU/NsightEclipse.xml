@@ -5,7 +5,7 @@
   <additional_preprocessor>
     <preprocessor>_USE_MATH_DEFINES</preprocessor>
   </additional_preprocessor>
-  <description><![CDATA[Example of using CUFFT. In this example, CUFFT is used to compute the 1D-convolution of some signal with some filter by transforming both into frequency domain, multiplying them together, and transforming the signal back to time domain on Multiple GPU.]]></description>
+  <description><![CDATA[Example of using CUFFT. In this example, CUFFT is used to compute the 2D-convolution of some signal with some filter by transforming both into frequency domain, multiplying them together, and transforming the signal back to time domain on Multiple GPU.]]></description>
   <devicecompilation>whole</devicecompilation>
   <includepaths>
     <path>./</path>
@@ -40,6 +40,7 @@
   <sm-arch>sm37</sm-arch>
   <sm-arch>sm50</sm-arch>
   <sm-arch>sm52</sm-arch>
+  <sm-arch>sm60</sm-arch>
   <supported_envs>
     <env>
       <arch>x86_64</arch>

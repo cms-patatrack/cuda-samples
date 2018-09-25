@@ -103,12 +103,6 @@ int main(int argc, char **argv)
 #endif
         checkCudaErrors(cudaSetDevice(0));
 
-        // cudaDeviceReset causes the driver to clean up all state. While
-        // not mandatory in normal operation, it is good practice.  It is also
-        // needed to ensure correct operation when the application is being
-        // profiled. Calling cudaDeviceReset causes all profile data to be
-        // flushed before the application exits
-        cudaDeviceReset();
         exit(EXIT_WAIVED);
     }
 
@@ -149,12 +143,6 @@ int main(int argc, char **argv)
         for (int i=0; i < gpu_count; i++)
         {
             checkCudaErrors(cudaSetDevice(gpuid[i]));
-            // cudaDeviceReset causes the driver to clean up all state. While
-            // not mandatory in normal operation, it is good practice.  It is also
-            // needed to ensure correct operation when the application is being
-            // profiled. Calling cudaDeviceReset causes all profile data to be
-            // flushed before the application exits
-            cudaDeviceReset();
         }
         exit(EXIT_WAIVED);
     }
@@ -306,13 +294,6 @@ int main(int argc, char **argv)
     for (int i=0; i<gpu_n; i++)
     {
         checkCudaErrors(cudaSetDevice(i));
-
-        // cudaDeviceReset causes the driver to clean up all state. While
-        // not mandatory in normal operation, it is good practice.  It is also
-        // needed to ensure correct operation when the application is being
-        // profiled. Calling cudaDeviceReset causes all profile data to be
-        // flushed before the application exits
-        cudaDeviceReset();
     }
 
     if (error_count != 0)

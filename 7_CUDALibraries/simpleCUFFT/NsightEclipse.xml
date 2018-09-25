@@ -2,7 +2,7 @@
 <!DOCTYPE entry SYSTEM "SamplesInfo.dtd">
 <entry>
   <name>simpleCUFFT</name>
-  <description><![CDATA[Example of using CUFFT. In this example, CUFFT is used to compute the 1D-convolution of some signal with some filter by transforming both into frequency domain, multiplying them together, and transforming the signal back to time domain.]]></description>
+  <description><![CDATA[Example of using CUFFT. In this example, CUFFT is used to compute the 1D-convolution of some signal with some filter by transforming both into frequency domain, multiplying them together, and transforming the signal back to time domain. cuFFT plans are created using simple and advanced API functions.]]></description>
   <devicecompilation>whole</devicecompilation>
   <includepaths>
     <path>./</path>
@@ -37,6 +37,7 @@
   <sm-arch>sm37</sm-arch>
   <sm-arch>sm50</sm-arch>
   <sm-arch>sm52</sm-arch>
+  <sm-arch>sm60</sm-arch>
   <supported_envs>
     <env>
       <arch>x86_64</arch>

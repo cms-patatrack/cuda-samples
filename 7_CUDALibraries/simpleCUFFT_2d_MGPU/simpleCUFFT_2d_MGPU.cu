@@ -251,7 +251,6 @@ int main(int argc, char **argv)
     result = cufftDestroy(planComplex);
     if (result != CUFFT_SUCCESS) { printf ("cufftDestroy failed: code %d\n",(int)result); exit (EXIT_FAILURE); }
 
-    cudaDeviceReset();
     exit(EXIT_SUCCESS);
 }
 

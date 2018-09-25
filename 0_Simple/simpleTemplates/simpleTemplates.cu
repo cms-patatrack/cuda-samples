@@ -99,12 +99,6 @@ main(int argc, char **argv)
 
     printf("\n[simpleTemplates] -> Test Results: %d Failures\n", g_TotalFailures);
 
-    // cudaDeviceReset causes the driver to clean up all state. While
-    // not mandatory in normal operation, it is good practice.  It is also
-    // needed to ensure correct operation when the application is being
-    // profiled. Calling cudaDeviceReset causes all profile data to be
-    // flushed before the application exits
-    cudaDeviceReset();
     exit(g_TotalFailures == 0 ? EXIT_SUCCESS : EXIT_FAILURE);
 }
 
@@ -269,11 +263,4 @@ runTest(int argc, char **argv, int len)
     free(reference);
     checkCudaErrors(cudaFree(d_idata));
     checkCudaErrors(cudaFree(d_odata));
-
-    // cudaDeviceReset causes the driver to clean up all state. While
-    // not mandatory in normal operation, it is good practice.  It is also
-    // needed to ensure correct operation when the application is being
-    // profiled. Calling cudaDeviceReset causes all profile data to be
-    // flushed before the application exits
-    cudaDeviceReset();
 }

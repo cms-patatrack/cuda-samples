@@ -6,6 +6,7 @@
     <flag>-DUSE_CUDAINTEROP</flag>
     <flag>-DGRAPHICS_SETUP_EGL</flag>
     <flag>-DUSE_GLES</flag>
+    <flag>-DWIN_INTERFACE_CUSTOM</flag>
   </cflags>
   <cuda_api_list>
     <toolkit>cudaGraphicsMapResources</toolkit>
@@ -56,6 +57,7 @@
   <sm-arch>sm37</sm-arch>
   <sm-arch>sm50</sm-arch>
   <sm-arch>sm52</sm-arch>
+  <sm-arch>sm60</sm-arch>
   <sources>
     <ignore>graphics_interface.c</ignore>
   </sources>

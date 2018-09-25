@@ -588,29 +588,29 @@ int main (int argc, char *argv[])
  *      P*A*Q^T = L*U
  *  which is the fundamental relation in cusolverRf.
  */
-    printf("step 5: form P*A*Q^T = L*U\n");
+    printf("step 6: form P*A*Q^T = L*U\n");
 
     h_P = (int*)malloc(sizeof(int)*rowsA);
     h_Q = (int*)malloc(sizeof(int)*colsA);
     assert(NULL != h_P);
     assert(NULL != h_Q);
 
-    printf("step 5.1: P = Plu*Qreroder\n");
+    printf("step 6.1: P = Plu*Qreroder\n");
     // gather operation, P = Qreorder(Plu)
     for(int j = 0 ; j < rowsA ; j++){
         h_P[j] = h_Qreorder[h_Plu[j]];
     }
 
-    printf("step 5.2: Q = Qlu*Qreorder \n");
+    printf("step 6.2: Q = Qlu*Qreorder \n");
     // gather operation, Q = Qreorder(Qlu)
     for(int j = 0 ; j < colsA ; j++){
         h_Q[j] = h_Qreorder[h_Qlu[j]];
     }
 
-    printf("step 6: create cusolverRf handle\n");
+    printf("step 7: create cusolverRf handle\n");
     checkCudaErrors(cusolverRfCreate(&cusolverRfH));
 
-    printf("step 7: set parameters for cusolverRf \n");
+    printf("step 8: set parameters for cusolverRf \n");
     // numerical values for checking "zeros" and for boosting.
     checkCudaErrors(cusolverRfSetNumericProperties(cusolverRfH, nzero, nboost));
 
@@ -625,7 +625,7 @@ int main (int argc, char *argv[])
     checkCudaErrors(cusolverRfSetResetValuesFastMode(
         cusolverRfH, CUSOLVERRF_RESET_VALUES_FAST_MODE_ON));
 
-    printf("step 8: assemble P*A*Q = L*U \n");
+    printf("step 9: assemble P*A*Q = L*U \n");
     start = second();
     start = second();
 
@@ -644,10 +644,10 @@ int main (int argc, char *argv[])
     stop = second();
     time_rf_assemble = stop - start;
 
-    printf("step 9: analyze to extract parallelism \n");
+    printf("step 10: analyze to extract parallelism \n");
     checkCudaErrors(cusolverRfAnalyze(cusolverRfH));
 
-    printf("step 10: import A to cusolverRf \n");
+    printf("step 11: import A to cusolverRf \n");
     checkCudaErrors(cudaMemcpy(d_csrRowPtrA, h_csrRowPtrA, sizeof(int)*(rowsA+1), cudaMemcpyHostToDevice));
     checkCudaErrors(cudaMemcpy(d_csrColIndA, h_csrColIndA, sizeof(int)*nnzA     , cudaMemcpyHostToDevice));
     checkCudaErrors(cudaMemcpy(d_csrValA   , h_csrValA   , sizeof(double)*nnzA  , cudaMemcpyHostToDevice));
@@ -668,7 +668,7 @@ int main (int argc, char *argv[])
     stop = second();
     time_rf_reset = stop - start;
 
-    printf("step 10: refactorization \n");
+    printf("step 12: refactorization \n");
     start = second();
     start = second();
 
@@ -678,7 +678,7 @@ int main (int argc, char *argv[])
     stop = second();
     time_rf_refactor = stop - start;
 
-    printf("step 11: solve A*x = b \n");
+    printf("step 13: solve A*x = b \n");
     checkCudaErrors(cudaMemcpy(d_x, h_b, sizeof(double)*rowsA, cudaMemcpyHostToDevice));
 
     start = second();
@@ -690,7 +690,7 @@ int main (int argc, char *argv[])
     stop = second();
     time_rf_solve = stop - start;
 
-    printf("step 12: evaluate residual r = b - A*x (result on GPU)\n");
+    printf("step 14: evaluate residual r = b - A*x (result on GPU)\n");
     checkCudaErrors(cudaMemcpy(d_r, h_b, sizeof(double)*rowsA, cudaMemcpyHostToDevice));
 
     checkCudaErrors(cusparseDcsrmv(cusparseH,
@@ -782,8 +782,6 @@ int main (int argc, char *argv[])
     if (d_P) { checkCudaErrors(cudaFree(d_P)); }
     if (d_Q) { checkCudaErrors(cudaFree(d_Q)); }
     if (d_T) { checkCudaErrors(cudaFree(d_T)); }
-
-    cudaDeviceReset();
 
     return 0;
 }

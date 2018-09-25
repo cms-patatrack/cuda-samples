@@ -3,7 +3,7 @@
 <entry>
   <name>BlackScholes</name>
   <cflags>
-    <flag>-po maxrregcount=16</flag>
+    <flag>-maxrregcount=16</flag>
   </cflags>
   <description><![CDATA[This sample evaluates fair call and put prices for a given set of European options by Black-Scholes formula.]]></description>
   <devicecompilation>whole</devicecompilation>
@@ -37,6 +37,7 @@
   <sm-arch>sm37</sm-arch>
   <sm-arch>sm50</sm-arch>
   <sm-arch>sm52</sm-arch>
+  <sm-arch>sm60</sm-arch>
   <supported_envs>
     <env>
       <arch>x86_64</arch>

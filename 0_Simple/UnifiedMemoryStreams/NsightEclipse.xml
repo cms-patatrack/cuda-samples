@@ -28,6 +28,7 @@
     <keyword>cluster</keyword>
     <keyword>multi-GPU Support</keyword>
     <keyword>Unified Memory</keyword>
+    <keyword>UVM</keyword>
     <keyword>openMP</keyword>
     <keyword>Streams</keyword>
   </keywords>
@@ -52,10 +53,15 @@
   <sm-arch>sm37</sm-arch>
   <sm-arch>sm50</sm-arch>
   <sm-arch>sm52</sm-arch>
+  <sm-arch>sm60</sm-arch>
   <supported_envs>
     <env>
       <arch>x86_64</arch>
       <platform>linux</platform>
+    </env>
+    <env>
+      <arch>x86_64</arch>
+      <platform>macosx</platform>
     </env>
     <env>
       <platform>windows7</platform>

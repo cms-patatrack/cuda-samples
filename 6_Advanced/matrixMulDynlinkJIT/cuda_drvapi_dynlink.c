@@ -277,6 +277,12 @@ static CUresult LOAD_LIBRARY(CUDADRIVER *pInstance)
 
 #if defined(__APPLE__) || defined(__MACOSX)
 static char __CudaLibName[] = "/usr/local/cuda/lib/libcuda.dylib";
+#elif defined(__ANDROID__)
+#if defined (__aarch64__)
+static char __CudaLibName[] = "/system/vendor/lib64/libcuda.so";
+#elif defined(__arm__)
+static char __CudaLibName[] = "/system/vendor/lib/libcuda.so";
+#endif
 #else
 static char __CudaLibName[] = "libcuda.so.1";
 #endif

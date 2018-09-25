@@ -145,13 +145,6 @@ main(int argc, char **argv)
     {
         printf("Error: the selected device does not support the minimum compute capability of %d.%d.\n\n",
                minimumComputeVersion / 10, minimumComputeVersion % 10);
-
-        // cudaDeviceReset causes the driver to clean up all state. While
-        // not mandatory in normal operation, it is good practice.  It is also
-        // needed to ensure correct operation when the application is being
-        // profiled. Calling cudaDeviceReset causes all profile data to be
-        // flushed before the application exits
-        cudaDeviceReset();
         exit(EXIT_FAILURE);
     }
 
@@ -175,12 +168,6 @@ main(int argc, char **argv)
             break;
     }
 
-    // cudaDeviceReset causes the driver to clean up all state. While
-    // not mandatory in normal operation, it is good practice.  It is also
-    // needed to ensure correct operation when the application is being
-    // profiled. Calling cudaDeviceReset causes all profile data to be
-    // flushed before the application exits
-    cudaDeviceReset();
     printf(bResult ? "Test passed\n" : "Test failed!\n");
 }
 
@@ -305,6 +292,8 @@ T benchmarkReduce(int  n,
 
         // check if kernel execution generated an error
         getLastCudaError("Kernel execution failed");
+        // Clear d_idata for later use as temporary buffer.
+        cudaMemset(d_idata, 0, n*sizeof(T));
 
         if (cpuFinalReduction)
         {
@@ -329,8 +318,8 @@ T benchmarkReduce(int  n,
             {
                 int threads = 0, blocks = 0;
                 getNumBlocksAndThreads(kernel, s, maxBlocks, maxThreads, blocks, threads);
-
-                reduce<T>(s, threads, blocks, kernel, d_odata, d_odata);
+                cudaMemcpy(d_idata, d_odata, s*sizeof(T), cudaMemcpyDeviceToDevice);
+                reduce<T>(s, threads, blocks, kernel, d_idata, d_odata);
 
                 if (kernel < 3)
                 {

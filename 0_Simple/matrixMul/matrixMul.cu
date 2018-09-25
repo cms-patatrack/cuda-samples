@@ -34,6 +34,7 @@
 
 // Helper functions and utilities to work with CUDA
 #include <helper_functions.h>
+#include <helper_cuda.h>
 
 /**
  * Matrix multiplication (CUDA Kernel) on the device: C = A * B
@@ -341,13 +342,6 @@ int matrixMultiply(int argc, char **argv, int block_size, dim3 &dimsA, dim3 &dim
     cudaFree(d_C);
 
     printf("\nNOTE: The CUDA Samples are not meant for performance measurements. Results may vary when GPU Boost is enabled.\n");
-
-    // cudaDeviceReset causes the driver to clean up all state. While
-    // not mandatory in normal operation, it is good practice.  It is also
-    // needed to ensure correct operation when the application is being
-    // profiled. Calling cudaDeviceReset causes all profile data to be
-    // flushed before the application exits
-    cudaDeviceReset();
 
     if (correct)
     {

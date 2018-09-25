@@ -40,7 +40,7 @@
   <sm-arch>sm30</sm-arch>
   <sm-arch>sm35</sm-arch>
   <sm-arch>sm50</sm-arch>
-  <sm-arch>sm52</sm-arch>
+  <sm-arch>sm60</sm-arch>
   <supported_envs>
     <env>
       <arch>x86_64</arch>
@@ -57,6 +57,7 @@
   </supported_envs>
   <supported_sm_architectures>
     <exclude>3.7</exclude>
+    <exclude>5.2</exclude>
     <include>all</include>
   </supported_sm_architectures>
   <title>Simple CUFFT Callbacks</title>

@@ -84,7 +84,6 @@ int main(int argc, char *argv[])
 
         if (printfNPPinfo(argc, argv) == false)
         {
-            cudaDeviceReset();
             exit(EXIT_SUCCESS);
         }
 
@@ -125,7 +124,6 @@ int main(int argc, char *argv[])
 
         if (file_errors > 0)
         {
-            cudaDeviceReset();
             exit(EXIT_FAILURE);
         }
 
@@ -187,7 +185,6 @@ int main(int argc, char *argv[])
         nppiFree(oDeviceSrc.data());
         nppiFree(oDeviceDst.data());
 
-        cudaDeviceReset();
         exit(EXIT_SUCCESS);
     }
     catch (npp::Exception &rException)
@@ -196,7 +193,6 @@ int main(int argc, char *argv[])
         std::cerr << rException << std::endl;
         std::cerr << "Aborting." << std::endl;
 
-        cudaDeviceReset();
         exit(EXIT_FAILURE);
     }
     catch (...)
@@ -204,7 +200,6 @@ int main(int argc, char *argv[])
         std::cerr << "Program error! An unknow type of exception occurred. \n";
         std::cerr << "Aborting." << std::endl;
 
-        cudaDeviceReset();
         exit(EXIT_FAILURE);
         return -1;
     }

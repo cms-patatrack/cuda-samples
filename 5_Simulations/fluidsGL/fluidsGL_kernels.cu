@@ -17,13 +17,9 @@
 #include <helper_cuda.h>    // Helper functions for CUDA Error handling
 
 // OpenGL Graphics includes
-#include <GL/glew.h>
-#if defined(__APPLE__) || defined(MACOSX)
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-#include <GLUT/glut.h>
-#else
-#include <GL/freeglut.h>
-#endif
+#define HELPERGL_EXTERN_GL_FUNC_IMPLEMENTATION
+#include <helper_gl.h>
+
 
 // FluidsGL CUDA kernel definitions
 #include "fluidsGL_kernels.cuh"

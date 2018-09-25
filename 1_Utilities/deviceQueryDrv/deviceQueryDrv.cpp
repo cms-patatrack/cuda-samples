@@ -17,7 +17,6 @@
 #include <string.h>
 
 #include <cuda.h>
-#include <cudaProfiler.h>
 #include <helper_cuda_drvapi.h>
 #include <drvapi_error_string.h>
 
@@ -306,6 +305,5 @@ main(int argc, char **argv)
 
     printf("Result = PASS\n");
 
-    cuProfilerStop();
     exit(EXIT_SUCCESS);
 }

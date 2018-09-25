@@ -212,6 +212,8 @@ int linearSolverQR(
 {
     cublasHandle_t cublasHandle = NULL; // used in residual evaluation
     int bufferSize = 0;
+    int bufferSize_geqrf = 0;
+    int bufferSize_ormqr = 0;
     int *info = NULL;
     double *buffer = NULL;
     double *A = NULL;
@@ -223,7 +225,24 @@ int linearSolverQR(
 
     checkCudaErrors(cublasCreate(&cublasHandle));
 
-    checkCudaErrors(cusolverDnDgeqrf_bufferSize(handle, n, n, (double*)Acopy, lda, &bufferSize));
+    checkCudaErrors(cusolverDnDgeqrf_bufferSize(handle, n, n, (double*)Acopy, lda, &bufferSize_geqrf));
+    checkCudaErrors(cusolverDnDormqr_bufferSize(
+        handle,
+        CUBLAS_SIDE_LEFT,
+        CUBLAS_OP_T,
+        n,
+        1,
+        n,
+        A,
+        lda,
+        NULL,
+        x,
+        n,
+        &bufferSize_ormqr));
+
+    printf("buffer_geqrf = %d, buffer_ormqr = %d \n", bufferSize_geqrf, bufferSize_ormqr);
+    
+    bufferSize = (bufferSize_geqrf > bufferSize_ormqr)? bufferSize_geqrf : bufferSize_ormqr ; 
 
     checkCudaErrors(cudaMalloc(&info, sizeof(int)));
     checkCudaErrors(cudaMalloc(&buffer, sizeof(double)*bufferSize));
@@ -575,8 +594,6 @@ int main (int argc, char *argv[])
     if (d_x) { checkCudaErrors(cudaFree(d_x)); }
     if (d_b) { checkCudaErrors(cudaFree(d_b)); }
     if (d_r) { checkCudaErrors(cudaFree(d_r)); }
-
-    cudaDeviceReset();
 
     return 0;
 }

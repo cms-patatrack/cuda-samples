@@ -29,7 +29,6 @@
 
 // includes, CUDA
 #include <cuda.h>
-#include <cudaProfiler.h>
 #include <builtin_types.h>
 #include <drvapi_error_string.h>
 
@@ -591,8 +590,6 @@ int main(int argc, char **argv)
     }
 
     printf("%s\n", (i==N) ? "Result = PASS" : "Result = FAIL");
-
-    cuProfilerStop();
 
     exit((i==N) ? EXIT_SUCCESS : EXIT_FAILURE);
 }

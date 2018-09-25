@@ -111,6 +111,7 @@
   <sm-arch>sm37</sm-arch>
   <sm-arch>sm50</sm-arch>
   <sm-arch>sm52</sm-arch>
+  <sm-arch>sm60</sm-arch>
   <sources>
     <extranone>data\plush1_720p_10s.m2v</extranone>
   </sources>

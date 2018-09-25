@@ -30,8 +30,6 @@
 #include <nvrtc_helper.h>
 #include <timer.h>
 
-#include <cudaProfiler.h>
-
 #ifndef MAX
 #define MAX(a,b) (a > b ? a : b)
 #endif
@@ -71,8 +69,6 @@ int main(int argc, char **argv)
     runTest<int>(argc, argv, 64);
 
     printf("\n[simpleTemplates_nvrtc] -> Test Results: %d Failures\n", g_TotalFailures);
-
-    cuProfilerStop();
 
     exit(g_TotalFailures == 0 ? EXIT_SUCCESS : EXIT_FAILURE);
 }

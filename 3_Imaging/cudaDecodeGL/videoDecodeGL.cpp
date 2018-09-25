@@ -15,7 +15,7 @@
  */
 
 // OpenGL Graphics includes
-#include <GL/glew.h>
+#include <helper_gl.h>
 #if defined(__APPLE__) || defined(__MACOSX)
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #include <GLUT/glut.h>
@@ -26,7 +26,6 @@
 // CUDA Header includes
 #include <cuda.h>
 #include <cudaGL.h>
-#include <cudaProfiler.h>
 
 // CUDA utilities and system includes
 #include <helper_functions.h>
@@ -956,6 +955,7 @@ bool initGL(int argc, char **argv, int *pbTCC)
         glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE);
         glutInitWindowSize(g_nWindowWidth, g_nWindowHeight);
         glutCreateWindow(sAppName);
+		reshape(g_nWindowWidth, g_nWindowHeight);
 
         printf(">> initGL() creating window [%d x %d]\n", g_nWindowWidth, g_nWindowHeight);
 
@@ -964,9 +964,8 @@ bool initGL(int argc, char **argv, int *pbTCC)
         glutKeyboardFunc(keyboard);
         glutIdleFunc(idle);
 
-        glewInit();
-
-        if (!glewIsSupported("GL_VERSION_1_5 GL_ARB_vertex_buffer_object GL_ARB_pixel_buffer_object"))
+        if (!isGLVersionSupported(1,5) ||
+            !areGLExtensionsSupported("GL_ARB_vertex_buffer_object GL_ARB_pixel_buffer_object"))
         {
             fprintf(stderr, "Error: failed to get minimal extensions for demo\n");
             fprintf(stderr, "This sample requires:\n");
@@ -1114,7 +1113,6 @@ freeCudaResources(bool bDestroyContext)
         checkCudaErrors(cuvidCtxLockDestroy(g_CtxLock));
     }
 
-    cuProfilerStop();
     if (g_oContext && bDestroyContext)
     {
         checkCudaErrors(cuCtxDestroy(g_oContext));
@@ -1343,7 +1341,6 @@ bool cleanup(bool bDestroyContext)
                 g_bFrameData[1] = NULL;
             }
         }
-        cuProfilerStop();
 
         // Detach from the Current thread
         checkCudaErrors(cuCtxPopCurrent(NULL));
@@ -1351,7 +1348,6 @@ bool cleanup(bool bDestroyContext)
 
     if (g_pImageGL)
     {
-        cuProfilerStop();
         delete g_pImageGL;
         g_pImageGL = NULL;
     }

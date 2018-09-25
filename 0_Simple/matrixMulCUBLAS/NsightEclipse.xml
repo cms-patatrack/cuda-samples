@@ -52,6 +52,7 @@
   <sm-arch>sm37</sm-arch>
   <sm-arch>sm50</sm-arch>
   <sm-arch>sm52</sm-arch>
+  <sm-arch>sm60</sm-arch>
   <sources>
     <ignore>new/matrixMulCUBLAS.cpp</ignore>
   </sources>

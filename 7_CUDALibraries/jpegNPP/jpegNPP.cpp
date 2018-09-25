@@ -363,7 +363,6 @@ int main(int argc, char **argv)
     if (printfNPPinfo(argc, argv, 2, 0) == false)
     {
         cerr << "jpegNPP requires a GPU with Compute Capability 2.0 or higher" << endl;
-        cudaDeviceReset();
         return EXIT_SUCCESS;
     }
 
@@ -438,7 +437,6 @@ int main(int argc, char **argv)
     if (nMarker != 0x0D8)
     {
         cerr << "Invalid Jpeg Image" << endl;
-        cudaDeviceReset();
         return EXIT_FAILURE;
     }
 
@@ -499,7 +497,6 @@ int main(int argc, char **argv)
             if (nMarker != 0x0C0)
             {
                 cerr << "The sample does only support baseline JPEG images" << endl;
-                cudaDeviceReset();
                 return EXIT_SUCCESS;
             }
 
@@ -511,7 +508,6 @@ int main(int argc, char **argv)
             if (oFrameHeader.nComponents != 3)
             {
                 cerr << "The sample does only support color JPEG images" << endl;
-                cudaDeviceReset();
                 return EXIT_SUCCESS;
             }
 
@@ -789,6 +785,5 @@ int main(int argc, char **argv)
         cudaFree(apDstImage[i]);
     }
 
-    cudaDeviceReset();
     return EXIT_SUCCESS;
 }

@@ -426,7 +426,7 @@ GLuint ShaderCreate(const char *vshader_filename, const char *fshader_filename)
 //===========================================================================
 // InitGraphicsState() - initialize OpenGL
 //===========================================================================
-static void InitGraphicsState(void)
+static void InitGraphicsState(char **argv)
 {
   char *GL_version=(char *)glGetString(GL_VERSION);
   char *GL_vendor=(char *)glGetString(GL_VENDOR);
@@ -453,11 +453,23 @@ static void InitGraphicsState(void)
   checkCUDAError(); 
 
   //glBindVertexArray(0); // keep above Vertex Array Object bound (it's the only one throughout)
-   
+
   // GLSL stuff
-  mesh_shader = ShaderCreate("mesh.vert.glsl", "mesh.frag.glsl");
+  char *vertex_shader_path = sdkFindFilePath("mesh.vert.glsl", argv[0]);
+  char *fragment_shader_path = sdkFindFilePath("mesh.frag.glsl", argv[0]);
+
+  if (vertex_shader_path == NULL || fragment_shader_path == NULL)
+  {
+    printf("Error finding shader file\n");
+    exit(EXIT_FAILURE);
+  }
+
+  mesh_shader = ShaderCreate(vertex_shader_path, fragment_shader_path);
   GET_GLERROR(0);
-  
+
+  free(vertex_shader_path);
+  free(fragment_shader_path);
+
   glUseProgram(mesh_shader);
 }
 
@@ -497,7 +509,7 @@ bool runTest(int argc, char **argv, char *ref_file)
 	// create X11 window and set up associated OpenGL ES context
 	graphics_setup_window(0,0, window_width, window_height, sSDKsample);
 
-	InitGraphicsState(); // set up GLES stuff
+	InitGraphicsState(argv); // set up GLES stuff
 	
 	glClearColor( 0, 0.5, 1, 1 ); // blue-ish background
 	glClear( GL_COLOR_BUFFER_BIT );
@@ -626,12 +638,6 @@ int main(int argc, char **argv)
 
     runTest(argc, argv, ref_file);
 
-    // cudaDeviceReset causes the driver to clean up all state. While
-    // not mandatory in normal operation, it is good practice.  It is also
-    // needed to ensure correct operation when the application is being
-    // profiled. Calling cudaDeviceReset causes all profile data to be
-    // flushed before the application exits
-    cudaDeviceReset();
     printf("%s completed, returned %s\n", sSDKsample, (g_TotalErrors == 0) ? "OK" : "ERROR!");
 
     exit(g_TotalErrors == 0 ? EXIT_SUCCESS : EXIT_FAILURE);

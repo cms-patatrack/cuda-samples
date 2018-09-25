@@ -303,12 +303,13 @@ int main (int argc, char *argv[])
         }
     }
 
-    printf("step 2: reorder the matrix A to minimize zero fill-in\n");
-    printf("        if the user choose a reordering by -P=symrcm or -P=symamd\n");
-    printf("        The reordering will overwrite A such that \n");
-    printf("            A := A(Q,Q) where Q = symrcm(A) or Q = symamd(A)\n");
     if (NULL != opts.reorder)
     {
+        printf("step 2: reorder the matrix A to minimize zero fill-in\n");
+        printf("        if the user choose a reordering by -P=symrcm or -P=symamd\n");
+        printf("        The reordering will overwrite A such that \n");
+        printf("            A := A(Q,Q) where Q = symrcm(A) or Q = symamd(A)\n");
+
         h_Q          = (int*   )malloc(sizeof(int)*colsA);
         h_csrRowPtrB = (int*   )malloc(sizeof(int)*(rowsA+1));
         h_csrColIndB = (int*   )malloc(sizeof(int)*nnzA);
@@ -380,9 +381,14 @@ int main (int argc, char *argv[])
         memcpy(h_csrRowPtrA, h_csrRowPtrB, sizeof(int)*(rowsA+1));
         memcpy(h_csrColIndA, h_csrColIndB, sizeof(int)*nnzA);
         memcpy(h_csrValA   , h_csrValB   , sizeof(double)*nnzA);
+
+        printf("step 2.1: set right hand side vector (b) to 1\n");
+    }
+    else
+    {
+        printf("step 2: set right hand side vector (b) to 1\n");
     }
 
-    printf("step 2: set right hand side vector (b) to 1\n");
     for(int row = 0 ; row < rowsA ; row++)
     {
         h_b[row] = 1.0;
@@ -563,8 +569,6 @@ int main (int argc, char *argv[])
     if (d_x) { checkCudaErrors(cudaFree(d_x)); }
     if (d_b) { checkCudaErrors(cudaFree(d_b)); }
     if (d_r) { checkCudaErrors(cudaFree(d_r)); }
-
-    cudaDeviceReset();
 
     return 0;
 }

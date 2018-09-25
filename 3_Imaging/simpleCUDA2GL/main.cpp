@@ -23,7 +23,7 @@
 #endif
 
 // OpenGL Graphics includes
-#include <GL/glew.h>
+#include <helper_gl.h>
 #if defined(__APPLE__) || defined(MACOSX)
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #include <GLUT/glut.h>
@@ -533,13 +533,6 @@ void FreeResource()
     deleteTexture(&tex_screen);
     deleteTexture(&tex_cudaResult);
 
-    // cudaDeviceReset causes the driver to clean up all state. While
-    // not mandatory in normal operation, it is good practice.  It is also
-    // needed to ensure correct operation when the application is being
-    // profiled. Calling cudaDeviceReset causes all profile data to be
-    // flushed before the application exits
-    cudaDeviceReset();
-
     if (iGLUTWindowHandle)
     {
         glutDestroyWindow(iGLUTWindowHandle);
@@ -759,12 +752,10 @@ initGL(int *argc, char **argv)
     iGLUTWindowHandle = glutCreateWindow("CUDA OpenGL post-processing");
 
     // initialize necessary OpenGL extensions
-    glewInit();
-
-    if (! glewIsSupported(
-            "GL_VERSION_2_0 "
+    if (!isGLVersionSupported (2,0) ||
+        !areGLExtensionsSupported (
             "GL_ARB_pixel_buffer_object "
-            "GL_EXT_framebuffer_object "
+            "GL_EXT_framebuffer_object"
         ))
     {
         printf("ERROR: Support for necessary OpenGL extensions missing.");

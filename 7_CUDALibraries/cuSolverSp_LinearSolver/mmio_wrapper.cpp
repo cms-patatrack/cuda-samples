@@ -2,9 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-//#include <cuda_runtime.h>
-//#include "cusparse_v2.h"
-//#include "cusparse_ops.hxx"
+
 #include "mmio.h"
 
 #include <cusolverDn.h>

@@ -74,10 +74,16 @@ endif
 # architecture
 HOST_ARCH   := $(shell uname -m)
 TARGET_ARCH ?= $(HOST_ARCH)
-ifneq (,$(filter $(TARGET_ARCH),x86_64 aarch64 ppc64le))
-    TARGET_SIZE := 64
-else ifeq ($(TARGET_ARCH),armv7l)
-    TARGET_SIZE := 32
+ifneq (,$(filter $(TARGET_ARCH),x86_64 aarch64 ppc64le armv7l))
+    ifneq ($(TARGET_ARCH),$(HOST_ARCH))
+        ifneq (,$(filter $(TARGET_ARCH),x86_64 aarch64 ppc64le))
+            TARGET_SIZE := 64
+        else ifneq (,$(filter $(TARGET_ARCH),armv7l))
+            TARGET_SIZE := 32
+        endif
+    else
+        TARGET_SIZE := $(shell getconf LONG_BIT)
+    endif
 else
     $(error ERROR - unsupported value $(TARGET_ARCH) for TARGET_ARCH!)
 endif
@@ -85,6 +91,11 @@ ifneq ($(TARGET_ARCH),$(HOST_ARCH))
     ifeq (,$(filter $(HOST_ARCH)-$(TARGET_ARCH),aarch64-armv7l x86_64-armv7l x86_64-aarch64 x86_64-ppc64le))
         $(error ERROR - cross compiling from $(HOST_ARCH) to $(TARGET_ARCH) is not supported!)
     endif
+endif
+
+# When on native aarch64 system with userspace of 32-bit, change TARGET_ARCH to armv7l
+ifeq ($(HOST_ARCH)-$(TARGET_ARCH)-$(TARGET_SIZE),aarch64-aarch64-32)
+    TARGET_ARCH = armv7l
 endif
 
 # operating system
@@ -119,6 +130,16 @@ else ifneq ($(TARGET_ARCH),$(HOST_ARCH))
     else ifeq ($(TARGET_ARCH),aarch64)
         ifeq ($(TARGET_OS), linux)
             HOST_COMPILER ?= aarch64-linux-gnu-g++
+        else ifeq ($(TARGET_OS),qnx)
+            ifeq ($(QNX_HOST),)
+                $(error ERROR - QNX_HOST must be passed to the QNX host toolchain)
+            endif
+            ifeq ($(QNX_TARGET),)
+                $(error ERROR - QNX_TARGET must be passed to the QNX target toolchain)
+            endif
+            export QNX_HOST
+            export QNX_TARGET
+            HOST_COMPILER ?= $(QNX_HOST)/usr/bin/aarch64-unknown-nto-qnx7.0.0-g++
         else ifeq ($(TARGET_OS), android)
             HOST_COMPILER ?= aarch64-linux-android-g++
         endif
@@ -175,6 +196,48 @@ ALL_CCFLAGS += $(EXTRA_NVCCFLAGS)
 ALL_CCFLAGS += $(addprefix -Xcompiler ,$(CCFLAGS))
 ALL_CCFLAGS += $(addprefix -Xcompiler ,$(EXTRA_CCFLAGS))
 
+UBUNTU = $(shell lsb_release -i -s 2>/dev/null | grep -i ubuntu)
+
+SAMPLE_ENABLED := 1
+
+# This sample is not supported on ARMv7
+ifeq ($(TARGET_ARCH),armv7l)
+  $(info >>> WARNING - cuSolverSp_LinearSolver is not supported on ARMv7 - waiving sample <<<)
+  SAMPLE_ENABLED := 0
+endif
+
+# This sample is not supported on aarch64
+ifeq ($(TARGET_ARCH),aarch64)
+  $(info >>> WARNING - cuSolverSp_LinearSolver is not supported on aarch64 - waiving sample <<<)
+  SAMPLE_ENABLED := 0
+endif
+
+# Attempt to compile a minimal OpenMP application. If a.out exists, OpenMP is properly set up.
+ifneq ($(TARGET_OS),darwin)
+LIBRARIES += -lgomp
+ALL_CCFLAGS += -Xcompiler -fopenmp
+$(shell echo "#include <omp.h>" > test.c ; echo "int main() { omp_get_num_threads(); return 0; }" >> test.c ; $(HOST_COMPILER) -fopenmp test.c)
+OPENMP ?= $(shell find a.out 2>/dev/null)
+
+ifeq ($(OPENMP),)
+      $(info -----------------------------------------------------------------------------------------------)
+      $(info WARNING - OpenMP is unable to compile)
+      $(info -----------------------------------------------------------------------------------------------)
+      $(info   This CUDA Sample cannot be built if the OpenMP compiler is not set up correctly.)
+      $(info   This will be a dry-run of the Makefile.)
+      $(info   For more information on how to set up your environment to build and run this )
+      $(info   sample, please refer the CUDA Samples documentation and release notes)
+      $(info -----------------------------------------------------------------------------------------------)
+      SAMPLE_ENABLED := 0
+endif
+
+$(shell rm a.out test.c 2>/dev/null)
+endif
+
+ifeq ($(TARGET_OS),linux)
+ALL_CCFLAGS += -Xcompiler \"-Wl,--no-as-needed\"
+endif
+
 ALL_LDFLAGS :=
 ALL_LDFLAGS += $(ALL_CCFLAGS)
 ALL_LDFLAGS += $(addprefix -Xlinker ,$(LDFLAGS))
@@ -186,16 +249,8 @@ LIBRARIES :=
 
 ################################################################################
 
-SAMPLE_ENABLED := 1
-
-# This sample is not supported on ARM
-ifeq ($(TARGET_ARCH),armv7l)
-  $(info >>> WARNING - cuSolverSp_LinearSolver is not supported on ARM - waiving sample <<<)
-  SAMPLE_ENABLED := 0
-endif
-
 # Gencode arguments
-SMS ?= 20 30 35 37 50 52
+SMS ?= 20 30 35 37 50 52 60
 
 ifeq ($(SMS),)
 $(info >>> WARNING - no SM architectures have been specified - waiving sample <<<)

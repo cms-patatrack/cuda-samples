@@ -36,7 +36,6 @@
 
 // includes, CUDA
 #include <cuda.h>
-#include <cudaProfiler.h>
 #include <builtin_types.h>
 #include <drvapi_error_string.h>
 
@@ -462,7 +461,6 @@ runTest(int argc, char **argv)
     free(image_path);
     free(ref_path);
 
-    checkCudaErrors(cuProfilerStop());
     checkCudaErrors(cuCtxDestroy(cuContext));
 
     exit(bTestResults ? EXIT_SUCCESS : EXIT_FAILURE);

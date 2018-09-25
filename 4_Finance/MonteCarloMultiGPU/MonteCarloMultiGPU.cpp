@@ -129,12 +129,6 @@ static CUT_THREADPROC solverThread(TOptionPlan *plan)
 
     printf("solverThread() finished - GPU Device %d: %s\n", plan->device, deviceProp.name);
 
-    // cudaDeviceReset causes the driver to clean up all state. While
-    // not mandatory in normal operation, it is good practice.  It is also
-    // needed to ensure correct operation when the application is being
-    // profiled. Calling cudaDeviceReset causes all profile data to be
-    // flushed before the application exits
-    cudaDeviceReset();
     CUT_THREADEND;
 }
 
@@ -515,13 +509,6 @@ int main(int argc, char **argv)
     {
         sdkStartTimer(&hTimer[i]);
         checkCudaErrors(cudaSetDevice(i));
-
-        // cudaDeviceReset causes the driver to clean up all state. While
-        // not mandatory in normal operation, it is good practice.  It is also
-        // needed to ensure correct operation when the application is being
-        // profiled. Calling cudaDeviceReset causes all profile data to be
-        // flushed before the application exits
-        cudaDeviceReset();
     }
 
     delete[] optionSolver;
