@@ -1,5 +1,5 @@
 Sample: simpleSurfaceWrite
-Minimum spec: SM 2.0
+Minimum spec: SM 3.0
 
 Simple example that demonstrates the use of 2D surface references (Write-to-Texture)
 

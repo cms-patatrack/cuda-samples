@@ -1,5 +1,5 @@
 Sample: fluidsGLES
-Minimum spec: SM 2.0
+Minimum spec: SM 3.0
 
 An example of fluid simulation using CUDA and CUFFT, with OpenGLES rendering.
 

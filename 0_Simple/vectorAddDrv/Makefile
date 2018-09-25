@@ -180,6 +180,21 @@ ifneq ($(TARGET_ARCH),$(HOST_ARCH))
             LDFLAGS += -rpath-link=$(TARGET_FS)/usr/lib/arm-linux-gnueabihf
         endif
     endif
+    ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-linux)
+        ifneq ($(TARGET_FS),)
+            GCCVERSIONLTEQ46 := $(shell expr `$(HOST_COMPILER) -dumpversion` \<= 4.6)
+            ifeq ($(GCCVERSIONLTEQ46),1)
+                CCFLAGS += --sysroot=$(TARGET_FS)
+            endif
+            LDFLAGS += --sysroot=$(TARGET_FS)
+            LDFLAGS += -rpath-link=$(TARGET_FS)/lib -L $(TARGET_FS)/lib
+            LDFLAGS += -rpath-link=$(TARGET_FS)/usr/lib -L $(TARGET_FS)/usr/lib
+            LDFLAGS += -rpath-link=$(TARGET_FS)/usr/lib/aarch64-linux-gnu -L $(TARGET_FS)/usr/lib/aarch64-linux-gnu
+            LDFLAGS += --unresolved-symbols=ignore-in-shared-libs
+            CCFLAGS += -isystem=$(TARGET_FS)/usr/include
+            CCFLAGS += -isystem=$(TARGET_FS)/usr/include/aarch64-linux-gnu
+        endif
+    endif
 endif
 
 ifeq ($(TARGET_OS),qnx)
@@ -260,6 +275,7 @@ ifeq ($(TARGET_OS),darwin)
 else
   ifeq ($(TARGET_ARCH),x86_64)
     CUDA_SEARCH_PATH ?= $(CUDA_PATH)/lib64/stubs
+    CUDA_SEARCH_PATH += $(CUDA_PATH)/targets/x86_64-linux/lib/stubs
   endif
 
   ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-linux)
@@ -290,13 +306,14 @@ else
     CUDA_SEARCH_PATH ?= $(CUDA_PATH)/targets/ppc64le-linux/lib/stubs
   endif
 
-  CUDALIB ?= $(shell find -L $(CUDA_SEARCH_PATH) -maxdepth 1 -name libcuda.so)
+  CUDALIB ?= $(shell find -L $(CUDA_SEARCH_PATH) -maxdepth 1 -name libcuda.so 2> /dev/null)
   ifeq ("$(CUDALIB)","")
     $(info >>> WARNING - libcuda.so not found, CUDA Driver is not installed.  Please re-install the driver. <<<)
     SAMPLE_ENABLED := 0
+  else
+    CUDALIB := $(shell echo $(CUDALIB) | sed "s/ .*//" | sed "s/\/libcuda.so//" )
+    LIBRARIES += -L$(CUDALIB) -lcuda
   endif
-
-  LIBRARIES += -lcuda
 endif
 
 ifeq ($(SAMPLE_ENABLED),0)

@@ -1,5 +1,5 @@
 Sample: bicubicTexture
-Minimum spec: SM 2.0
+Minimum spec: SM 3.0
 
 This sample demonstrates how to efficiently implement a Bicubic B-spline interpolation filter with CUDA texture.
 

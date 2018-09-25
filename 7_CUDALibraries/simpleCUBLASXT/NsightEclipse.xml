@@ -53,7 +53,7 @@
       <platform>macosx</platform>
     </env>
     <env>
-      <arch>arm</arch>
+      <arch>aarch64</arch>
     </env>
     <env>
       <arch>ppc64le</arch>

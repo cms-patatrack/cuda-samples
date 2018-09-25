@@ -68,6 +68,14 @@ ifeq ("$(TARGET_OS)","linux")
           GLPATH += $(TARGET_FS)/usr/lib/arm-linux-gnueabihf
           GLLINK += -L$(TARGET_FS)/usr/lib/arm-linux-gnueabihf
         endif 
+      else ifeq ($(HOST_ARCH)-$(TARGET_ARCH),x86_64-aarch64)
+        GLPATH := /usr/aarch64-linux-gnu/lib
+        GLLINK := -L/usr/aarch64-linux-gnu/lib
+        ifneq ($(TARGET_FS),) 
+          GLPATH += $(TARGET_FS)/usr/lib
+          GLPATH += $(TARGET_FS)/usr/lib/aarch64-linux-gnu
+          GLLINK += -L$(TARGET_FS)/usr/lib/aarch64-linux-gnu
+        endif 
       else ifeq ($(HOST_ARCH)-$(TARGET_ARCH),x86_64-ppc64le)
         GLPATH := /usr/powerpc64le-linux-gnu/lib
         GLLINK := -L/usr/powerpc64le-linux-gnu/lib
@@ -102,10 +110,9 @@ ifeq ("$(TARGET_OS)","linux")
       DFLT_PATH ?= /usr/lib64
     endif
   
-  # find libGL, libGLU, libXi, 
+  # find libGL, libGLU 
   GLLIB  := $(shell find -L $(GLPATH) $(DFLT_PATH) -name libGL.so  -print 2>/dev/null)
   GLULIB := $(shell find -L $(GLPATH) $(DFLT_PATH) -name libGLU.so -print 2>/dev/null)
-  X11LIB := $(shell find -L $(GLPATH) $(DFLT_PATH) -name libX11.so -print 2>/dev/null)
 
   ifeq ("$(GLLIB)","")
       $(info >>> WARNING - libGL.so not found, refer to CUDA Getting Started Guide for how to find and install them. <<<)
@@ -115,19 +122,16 @@ ifeq ("$(TARGET_OS)","linux")
       $(info >>> WARNING - libGLU.so not found, refer to CUDA Getting Started Guide for how to find and install them. <<<)
       SAMPLE_ENABLED := 0
   endif
-  ifeq ("$(X11LIB)","")
-      $(info >>> WARNING - libX11.so not found, refer to CUDA Getting Started Guide for how to find and install them. <<<)
-      SAMPLE_ENABLED := 0
-  endif
 
   HEADER_SEARCH_PATH ?= $(TARGET_FS)/usr/include
-  ifeq ($(HOST_ARCH)-$(TARGET_ARCH),x86_64-armv7l)
+  ifeq ($(HOST_ARCH)-$(TARGET_ARCH)-$(TARGET_OS),x86_64-armv7l-linux)
       HEADER_SEARCH_PATH += /usr/arm-linux-gnueabihf/include
+  else ifeq ($(HOST_ARCH)-$(TARGET_ARCH)-$(TARGET_OS),x86_64-aarch64-linux)
+      HEADER_SEARCH_PATH += /usr/aarch64-linux-gnu/include
   endif
 
   GLHEADER  := $(shell find -L $(HEADER_SEARCH_PATH) -name gl.h -print 2>/dev/null)
   GLUHEADER := $(shell find -L $(HEADER_SEARCH_PATH) -name glu.h -print 2>/dev/null)
-  X11HEADER := $(shell find -L $(HEADER_SEARCH_PATH) -name Xlib.h -print 2>/dev/null)
 
   ifeq ("$(GLHEADER)","")
       $(info >>> WARNING - gl.h not found, refer to CUDA Getting Started Guide for how to find and install them. <<<)
@@ -135,10 +139,6 @@ ifeq ("$(TARGET_OS)","linux")
   endif
   ifeq ("$(GLUHEADER)","")
       $(info >>> WARNING - glu.h not found, refer to CUDA Getting Started Guide for how to find and install them. <<<)
-      SAMPLE_ENABLED := 0
-  endif
-  ifeq ("$(X11HEADER)","")
-      $(info >>> WARNING - Xlib.h not found, refer to CUDA Getting Started Guide for how to find and install them. <<<)
       SAMPLE_ENABLED := 0
   endif
 else

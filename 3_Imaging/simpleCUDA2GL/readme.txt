@@ -1,5 +1,5 @@
 Sample: simpleCUDA2GL
-Minimum spec: SM 2.0
+Minimum spec: SM 3.0
 
 This sample shows how to copy CUDA image back to OpenGL using the most efficient methods.
 

@@ -1,5 +1,5 @@
 Sample: boxFilter
-Minimum spec: SM 2.0
+Minimum spec: SM 3.0
 
 Fast image box filter using CUDA with OpenGL rendering.
 

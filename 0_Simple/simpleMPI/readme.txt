@@ -1,5 +1,5 @@
 Sample: simpleMPI
-Minimum spec: SM 2.0
+Minimum spec: SM 3.0
 
 Simple example demonstrating how to use MPI in combination with CUDA.
 

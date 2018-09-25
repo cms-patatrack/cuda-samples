@@ -1,5 +1,5 @@
 Sample: nbody_opengles
-Minimum spec: SM 2.0
+Minimum spec: SM 3.0
 
 This sample demonstrates efficient all-pairs simulation of a gravitational n-body simulation in CUDA. Unlike the OpenGL nbody sample, there is no user interaction.
 

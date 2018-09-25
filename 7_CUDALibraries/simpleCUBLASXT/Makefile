@@ -180,6 +180,21 @@ ifneq ($(TARGET_ARCH),$(HOST_ARCH))
             LDFLAGS += -rpath-link=$(TARGET_FS)/usr/lib/arm-linux-gnueabihf
         endif
     endif
+    ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-linux)
+        ifneq ($(TARGET_FS),)
+            GCCVERSIONLTEQ46 := $(shell expr `$(HOST_COMPILER) -dumpversion` \<= 4.6)
+            ifeq ($(GCCVERSIONLTEQ46),1)
+                CCFLAGS += --sysroot=$(TARGET_FS)
+            endif
+            LDFLAGS += --sysroot=$(TARGET_FS)
+            LDFLAGS += -rpath-link=$(TARGET_FS)/lib -L $(TARGET_FS)/lib
+            LDFLAGS += -rpath-link=$(TARGET_FS)/usr/lib -L $(TARGET_FS)/usr/lib
+            LDFLAGS += -rpath-link=$(TARGET_FS)/usr/lib/aarch64-linux-gnu -L $(TARGET_FS)/usr/lib/aarch64-linux-gnu
+            LDFLAGS += --unresolved-symbols=ignore-in-shared-libs
+            CCFLAGS += -isystem=$(TARGET_FS)/usr/include
+            CCFLAGS += -isystem=$(TARGET_FS)/usr/include/aarch64-linux-gnu
+        endif
+    endif
 endif
 
 ifeq ($(TARGET_OS),qnx)
@@ -219,6 +234,14 @@ ALL_CCFLAGS += $(EXTRA_NVCCFLAGS)
 ALL_CCFLAGS += $(addprefix -Xcompiler ,$(CCFLAGS))
 ALL_CCFLAGS += $(addprefix -Xcompiler ,$(EXTRA_CCFLAGS))
 
+SAMPLE_ENABLED := 1
+
+# This sample is not supported on ARMv7
+ifeq ($(TARGET_ARCH),armv7l)
+  $(info >>> WARNING - simpleCUBLASXT is not supported on ARMv7 - waiving sample <<<)
+  SAMPLE_ENABLED := 0
+endif
+
 ALL_LDFLAGS :=
 ALL_LDFLAGS += $(ALL_CCFLAGS)
 ALL_LDFLAGS += $(addprefix -Xlinker ,$(LDFLAGS))
@@ -251,6 +274,10 @@ endif
 
 LIBRARIES += -lcublas
 
+ifeq ($(SAMPLE_ENABLED),0)
+EXEC ?= @echo "[@]"
+endif
+
 ################################################################################
 
 # Target rules
@@ -258,16 +285,23 @@ all: build
 
 build: simpleCUBLASXT
 
+check.deps:
+ifeq ($(SAMPLE_ENABLED),0)
+	@echo "Sample will be waived due to the above missing dependencies"
+else
+	@echo "Sample is ready - all dependencies have been met"
+endif
+
 simpleCUBLASXT.o:simpleCUBLASXT.cpp
-	$(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
+	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
 
 simpleCUBLASXT: simpleCUBLASXT.o
-	$(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
-	mkdir -p ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
-	cp $@ ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
+	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
+	$(EXEC) mkdir -p ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
+	$(EXEC) cp $@ ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
 
 run: build
-	./simpleCUBLASXT
+	$(EXEC) ./simpleCUBLASXT
 
 clean:
 	rm -f simpleCUBLASXT simpleCUBLASXT.o

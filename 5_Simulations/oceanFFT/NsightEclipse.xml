@@ -3,7 +3,6 @@
 <entry>
   <name>oceanFFT</name>
   <cuda_api_list>
-    <toolkit>cudaGLSetGLDevice</toolkit>
     <toolkit>cudaGraphicsMapResources</toolkit>
     <toolkit>cudaGraphicsUnmapResources</toolkit>
     <toolkit>cudaGraphicsResourceGetMappedPointer</toolkit>

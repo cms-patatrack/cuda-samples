@@ -1,5 +1,5 @@
 Sample: simplePitchLinearTexture
-Minimum spec: SM 2.0
+Minimum spec: SM 3.0
 
 Use of Pitch Linear Textures
 

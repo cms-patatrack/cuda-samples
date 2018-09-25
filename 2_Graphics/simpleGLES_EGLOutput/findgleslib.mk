@@ -68,6 +68,14 @@ ifeq ("$(TARGET_OS)","linux")
           GLPATH += $(TARGET_FS)/usr/lib/arm-linux-gnueabihf
           GLLINK += -L$(TARGET_FS)/usr/lib/arm-linux-gnueabihf
         endif 
+      else ifeq ($(HOST_ARCH)-$(TARGET_ARCH),x86_64-aarch64)
+        GLPATH := /usr/aarch64-linux-gnu/lib
+        GLLINK := -L/usr/aarch64-linux-gnu/lib
+        ifneq ($(TARGET_FS),) 
+          GLPATH += $(TARGET_FS)/usr/lib
+          GLPATH += $(TARGET_FS)/usr/lib/aarch64-linux-gnu
+          GLLINK += -L$(TARGET_FS)/usr/lib/aarch64-linux-gnu
+        endif 
       else
         UBUNTU_PKG_NAME = $(shell which dpkg >/dev/null 2>&1 && dpkg -l 'nvidia-*' | grep '^ii' | awk '{print $$2}' | head -1)
         ifneq ("$(UBUNTU_PKG_NAME)","")
@@ -118,8 +126,10 @@ ifeq ("$(TARGET_OS)","linux")
   endif
 
   HEADER_SEARCH_PATH ?= $(TARGET_FS)/usr/include
-  ifeq ($(HOST_ARCH)-$(TARGET_ARCH),x86_64-armv7l)
+  ifeq ($(HOST_ARCH)-$(TARGET_ARCH)-$(TARGET_OS),x86_64-armv7l-linux)
       HEADER_SEARCH_PATH += /usr/arm-linux-gnueabihf/include
+  else ifeq ($(HOST_ARCH)-$(TARGET_ARCH)-$(TARGET_OS),x86_64-aarch64-linux)
+      HEADER_SEARCH_PATH += /usr/aarch64-linux-gnu/include
   endif
 
   EGLHEADER  := $(shell find -L $(HEADER_SEARCH_PATH) -name egl.h -print 2>/dev/null)

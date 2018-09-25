@@ -1,5 +1,5 @@
 Sample: cudaOpenMP
-Minimum spec: SM 2.0
+Minimum spec: SM 3.0
 
 This sample demonstrates how to use OpenMP API to write an application for multiple GPUs.
 

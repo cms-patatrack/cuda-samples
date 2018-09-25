@@ -1,5 +1,5 @@
 Sample: MC_EstimatePiP
-Minimum spec: SM 2.0
+Minimum spec: SM 3.0
 
 This sample uses Monte Carlo simulation for Estimation of Pi (using batch PRNG).  This sample also uses the NVIDIA CURAND library.
 

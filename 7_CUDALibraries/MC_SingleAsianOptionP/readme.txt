@@ -1,5 +1,5 @@
 Sample: MC_SingleAsianOptionP
-Minimum spec: SM 2.0
+Minimum spec: SM 3.0
 
 This sample uses Monte Carlo to simulate Single Asian Options using the NVIDIA CURAND library.
 

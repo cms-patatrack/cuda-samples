@@ -67,6 +67,14 @@ ifeq ("$(TARGET_OS)","linux")
         ifneq ($(TARGET_FS),) 
           GLPATH += $(TARGET_FS)/usr/lib/arm-linux-gnueabihf
           GLLINK += -L$(TARGET_FS)/usr/lib/arm-linux-gnueabihf
+        endif
+      else ifeq ($(HOST_ARCH)-$(TARGET_ARCH),x86_64-aarch64)
+        GLPATH := /usr/aarch64-linux-gnu/lib
+        GLLINK := -L/usr/aarch64-linux-gnu/lib
+        ifneq ($(TARGET_FS),)
+          GLPATH += $(TARGET_FS)/usr/lib
+          GLPATH += $(TARGET_FS)/usr/lib/aarch64-linux-gnu
+          GLLINK += -L$(TARGET_FS)/usr/lib/aarch64-linux-gnu
         endif 
       else
         UBUNTU_PKG_NAME = $(shell which dpkg >/dev/null 2>&1 && dpkg -l 'nvidia-*' | grep '^ii' | awk '{print $$2}' | head -1)
@@ -107,8 +115,10 @@ ifeq ("$(TARGET_OS)","linux")
   endif
 
   HEADER_SEARCH_PATH ?= $(TARGET_FS)/usr/include
-  ifeq ($(HOST_ARCH)-$(TARGET_ARCH),x86_64-armv7l)
+  ifeq ($(HOST_ARCH)-$(TARGET_ARCH)-$(TARGET_OS),x86_64-armv7l-linux)
       HEADER_SEARCH_PATH += /usr/arm-linux-gnueabihf/include
+  else ifeq ($(HOST_ARCH)-$(TARGET_ARCH)-$(TARGET_OS),x86_64-aarch64-linux)
+      HEADER_SEARCH_PATH += /usr/aarch64-linux-gnu/include
   endif
 
   EGLHEADER  := $(shell find -L $(HEADER_SEARCH_PATH) -name egl.h -print 2>/dev/null)
@@ -127,14 +137,10 @@ endif
 
 # Attempt to compile a minimal EGL application and run to check if EGL_SUPPORT_REUSE_NV is supported in the EGL headers available.
 ifneq ($(SAMPLE_ENABLED), 0)
-      $(shell printf "#include <EGL/egl.h>\n#include <EGL/eglext.h>\nint main() {\n#ifdef EGL_SUPPORT_REUSE_NV \n #pragma message(\"Compatible EGL header found\") \n  return 0;\n#endif \n return 1;\n}"  > test.c; )
-      EGL_DEFINES := $(shell $(HOST_COMPILER) $(CCFLAGS) $(EXTRA_CCFLAGS) $(LDFLAGS) $(EXTRA_LDFLAGS) -lEGL test.c 2>&1 | grep -ic "Compatible EGL header found";)
-      EXE_EXISTS := $(shell find a.out 2>/dev/null)
+      $(shell printf "#include <EGL/egl.h>\n#include <EGL/eglext.h>\nint main() {\n#ifdef EGL_SUPPORT_REUSE_NV \n #error \"Compatible EGL header found\" \n  return 0;\n#endif \n return 1;\n}"  > test.c; )
+      EGL_DEFINES := $(shell $(HOST_COMPILER) $(CCFLAGS) $(EXTRA_CCFLAGS) -lEGL test.c -c 2>&1 | grep -ic "Compatible EGL header found";)
       SHOULD_WAIVE := 0
       ifeq ($(EGL_DEFINES),0)
-        SHOULD_WAIVE := 1
-      endif
-      ifeq (,$(EXE_EXISTS))
         SHOULD_WAIVE := 1
       endif
       ifeq ($(SHOULD_WAIVE),1)
@@ -147,6 +153,6 @@ ifneq ($(SAMPLE_ENABLED), 0)
           $(info -----------------------------------------------------------------------------------------------)
           SAMPLE_ENABLED := 0
       endif
-      $(shell rm a.out test.c 2>/dev/null)
+      $(shell rm test.o test.c 2>/dev/null)
 endif
 

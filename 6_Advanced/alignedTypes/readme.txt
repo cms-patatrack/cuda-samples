@@ -1,5 +1,5 @@
 Sample: alignedTypes
-Minimum spec: SM 2.0
+Minimum spec: SM 3.0
 
 A simple test, showing huge access speed gap between aligned and misaligned structures.
 

@@ -1,5 +1,5 @@
 Sample: SobolQRNG
-Minimum spec: SM 2.0
+Minimum spec: SM 3.0
 
 This sample implements Sobol Quasirandom Sequence Generator.
 

@@ -24,7 +24,6 @@
 
 // CUDA utilities and system includes
 #include <helper_cuda.h>
-#include <helper_cuda_gl.h>
 #include <rendercheck_gl.h>
 
 // System includes
@@ -674,7 +673,7 @@ int main(int argc, char **argv)
             }
 
             // Select CUDA device with OpenGL interoperability
-            findCudaGLDevice(argc, (const char **)argv);
+            findCudaDevice(argc, (const char **)argv);
         }
 
         // Create vertices

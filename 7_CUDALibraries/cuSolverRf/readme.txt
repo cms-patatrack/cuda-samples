@@ -1,5 +1,5 @@
 Sample: cuSolverRf
-Minimum spec: SM 2.0
+Minimum spec: SM 3.0
 
 A CUDA Sample that demonstrates cuSolver's refactorization library - CUSOLVERRF.
 
