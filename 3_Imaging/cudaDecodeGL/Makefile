@@ -215,7 +215,7 @@ ifeq ($(TARGET_OS),darwin)
  ALL_LDFLAGS += -Xlinker -framework -Xlinker GLUT
 else
  LIBRARIES += -L../../common/lib/$(TARGET_OS)/$(TARGET_ARCH) $(GLLINK)
- LIBRARIES += -lGL -lGLU -lX11 -lXi -lXmu -lglut -lGLEW
+ LIBRARIES += -lGL -lGLU -lX11 -lglut -lGLEW
 endif
 
 # Gencode arguments
