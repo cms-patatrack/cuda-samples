@@ -7,6 +7,10 @@
 // The multithread code is from me.
 
 #include <stdio.h>
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
+
 #include "cdpQuicksort.h"
 
 // Inline PTX call to return index of highest non-zero bit in a word
@@ -54,14 +58,14 @@ __device__ __forceinline__ int qcompare(unsigned &val1, unsigned &val2)
 //  how much data we can sort per block.
 //
 ////////////////////////////////////////////////////////////////////////////////
-static __device__ __forceinline__ void bitonicsort_kernel(unsigned *indata, unsigned *outdata, unsigned int offset, unsigned int len)
+static __device__ __forceinline__ void bitonicsort_kernel(unsigned *indata, unsigned *outdata, unsigned int offset, unsigned int len, cg::thread_block cta)
 {
     __shared__ unsigned sortbuf[1024];     // Max of 1024 elements - TODO: make this dynamic
 
     // First copy data into shared memory.
     unsigned int inside = (threadIdx.x < len);
     sortbuf[threadIdx.x] = inside ? indata[threadIdx.x + offset] : 0xffffffffu;
-    __syncthreads();
+    cg::sync(cta);
 
     // Now the sort loops
     // Here, "k" is the sort level (remember bitonic does a multi-level butterfly style sort)
@@ -76,7 +80,7 @@ static __device__ __forceinline__ void bitonicsort_kernel(unsigned *indata, unsi
             unsigned my_elem = sortbuf[threadIdx.x];
             unsigned swap_elem = sortbuf[swap_idx];
 
-            __syncthreads();
+            cg::sync(cta);
 
             // The k'th bit of my threadid (and hence my sort item ID)
             // determines if we sort ascending or descending.
@@ -108,7 +112,7 @@ static __device__ __forceinline__ void bitonicsort_kernel(unsigned *indata, unsi
                 sortbuf[swap_idx] = my_elem;
             }
 
-            __syncthreads();
+            cg::sync(cta);
         }
     }
 
@@ -130,7 +134,7 @@ static __device__ __forceinline__ void bitonicsort_kernel(unsigned *indata, unsi
 //  type. It must be a directly-comparable (i.e. with max value) type.
 //
 ////////////////////////////////////////////////////////////////////////////////
-static __device__ __forceinline__ void big_bitonicsort_kernel(unsigned *indata, unsigned *outdata, unsigned *backbuf, unsigned int offset, unsigned int len)
+static __device__ __forceinline__ void big_bitonicsort_kernel(unsigned *indata, unsigned *outdata, unsigned *backbuf, unsigned int offset, unsigned int len, cg::thread_block cta)
 {
     unsigned int len2 = 1 << (__btflo(len-1U)+1);   // Round up len to nearest power-of-2
 
@@ -151,7 +155,7 @@ static __device__ __forceinline__ void big_bitonicsort_kernel(unsigned *indata, 
         }
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     // Now the sort loops
     // Here, "k" is the sort level (remember bitonic does a multi-level butterfly style sort)
@@ -216,7 +220,7 @@ static __device__ __forceinline__ void big_bitonicsort_kernel(unsigned *indata, 
                 }
             }
 
-            __syncthreads();    // Only need to sync for each "j" pass
+            cg::sync(cta);    // Only need to sync for each "j" pass
         }
     }
 
@@ -239,12 +243,16 @@ static __device__ __forceinline__ void big_bitonicsort_kernel(unsigned *indata, 
 
 __global__ void bitonicsort(unsigned *indata, unsigned *outdata, unsigned int offset, unsigned int len)
 {
-    bitonicsort_kernel(indata, outdata, offset, len);
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
+    bitonicsort_kernel(indata, outdata, offset, len, cta);
 }
 
 __global__ void big_bitonicsort(unsigned *indata, unsigned *outdata, unsigned *backbuf, unsigned int offset, unsigned int len)
 {
-    big_bitonicsort_kernel(indata, outdata, backbuf, offset, len);
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
+    big_bitonicsort_kernel(indata, outdata, backbuf, offset, len, cta);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

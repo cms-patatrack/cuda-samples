@@ -19,7 +19,9 @@
 */
 
 #pragma once
+#include <cooperative_groups.h>
 
+namespace cg = cooperative_groups;
 #include "Common.h"
 
 
@@ -84,6 +86,8 @@ __global__ void CUDAkernelQuantizationFloat(float *SrcDst, int Stride)
 */
 __global__ void CUDAkernelQuantizationShort(short *SrcDst, int Stride)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     // Block index
     int bx = blockIdx.x;
     int by = blockIdx.y;
@@ -110,7 +114,7 @@ __global__ void CUDAkernelQuantizationShort(short *SrcDst, int Stride)
         curCoef /= curQuant;
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     curCoef = curCoef * curQuant;
 

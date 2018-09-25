@@ -37,7 +37,7 @@ int main(int argc, char **argv)
     char *ptx, *kernel_file;
     size_t ptxSize;
     kernel_file = sdkFindFilePath("vectorAdd_kernel.cu", argv[0]);
-    compileFileToPTX(kernel_file, 0, NULL, &ptx, &ptxSize);
+    compileFileToPTX(kernel_file, argc, argv, &ptx, &ptxSize, 0);
     CUmodule module = loadPTX(ptx, argc, argv);
 
     CUfunction kernel_addr;

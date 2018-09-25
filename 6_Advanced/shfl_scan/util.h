@@ -10,7 +10,7 @@
             exit(EXIT_FAILURE);                                           \
         }                                                                 \
         /* Check asynchronous errors, i.e. kernel failed (ULF) */         \
-        err = cudaThreadSynchronize();                                    \
+        err = cudaDeviceSynchronize();                                    \
         if (cudaSuccess != err) {                                         \
             fprintf (stderr, "Cuda error in file '%s' in line %i : %s!\n",\
                      __FILE__, __LINE__, cudaGetErrorString( err) );      \

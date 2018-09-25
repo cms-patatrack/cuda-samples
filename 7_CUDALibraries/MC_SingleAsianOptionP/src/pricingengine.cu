@@ -17,6 +17,9 @@
 #include <stdexcept>
 #include <typeinfo>
 #include <cuda_runtime.h>
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
 #include <curand_kernel.h>
 
 #include "../inc/asianoption.h"
@@ -81,7 +84,7 @@ __global__ void generatePaths(Real *const paths,
 }
 
 template <typename Real>
-__device__ Real reduce_sum(Real in)
+__device__ Real reduce_sum(Real in, cg::thread_block cta)
 {
     SharedMemory<Real> sdata;
 
@@ -90,7 +93,7 @@ __device__ Real reduce_sum(Real in)
     unsigned int ltid = threadIdx.x;
 
     sdata[ltid] = in;
-    __syncthreads();
+    cg::sync(cta);
 
     // Do reduction in shared mem
     for (unsigned int s = blockDim.x / 2 ; s > 0 ; s >>= 1)
@@ -100,7 +103,7 @@ __device__ Real reduce_sum(Real in)
             sdata[ltid] += sdata[ltid + s];
         }
 
-        __syncthreads();
+        cg::sync(cta);
     }
 
     return sdata[0];
@@ -114,6 +117,8 @@ __global__ void computeValue(Real *const values,
                              const unsigned int numSims,
                              const unsigned int numTimesteps)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     // Determine thread ID
     unsigned int bid = blockIdx.x;
     unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -148,7 +153,7 @@ __global__ void computeValue(Real *const values,
     }
 
     // Reduce within the block
-    sumPayoffs = reduce_sum<Real>(sumPayoffs);
+    sumPayoffs = reduce_sum<Real>(sumPayoffs, cta);
 
     // Store the result
     if (threadIdx.x == 0)

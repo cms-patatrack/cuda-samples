@@ -11,6 +11,10 @@
 
 // Utilities and system includes
 
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
+
 #include <helper_cuda.h>
 
 #ifndef USE_TEXTURE_RGBA8UI
@@ -75,6 +79,8 @@ __global__ void
 cudaProcess(unsigned int *g_odata, int imgw, int imgh,
             int tilew, int r, float threshold, float highlight)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     extern __shared__ uchar4 sdata[];
 
     int tx = threadIdx.x;
@@ -123,7 +129,7 @@ cudaProcess(unsigned int *g_odata, int imgw, int imgh,
     }
 
     // wait for loads to complete
-    __syncthreads();
+    cg::sync(cta);
 
     // perform convolution
     float rsum = 0.0f;

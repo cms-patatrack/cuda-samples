@@ -18,6 +18,9 @@
 // - Devices with HyperQ will run up to 32 kernels simultaneously.
 
 #include <stdio.h>
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
 #include <helper_functions.h>
 #include <helper_cuda.h>
 
@@ -66,6 +69,8 @@ __global__ void kernel_B(clock_t *d_o, clock_t clock_count)
 // Single-warp reduction kernel (note: this is not optimized for simplicity)
 __global__ void sum(clock_t *d_clocks, int N)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     __shared__ clock_t s_clocks[32];
 
     clock_t my_sum = 0;
@@ -76,7 +81,7 @@ __global__ void sum(clock_t *d_clocks, int N)
     }
 
     s_clocks[threadIdx.x] = my_sum;
-    __syncthreads();
+    cg::sync(cta);
 
     for (int i = warpSize / 2 ; i > 0 ; i /= 2)
     {
@@ -85,7 +90,7 @@ __global__ void sum(clock_t *d_clocks, int N)
             s_clocks[threadIdx.x] += s_clocks[threadIdx.x + i];
         }
 
-        __syncthreads();
+        cg::sync(cta);
     }
 
     if (threadIdx.x == 0)

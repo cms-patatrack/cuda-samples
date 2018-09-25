@@ -47,7 +47,7 @@ extern "C" { void* __libc_dlsym (void *map, const char *name); }
 #define STRINGIFY(x) #x
 #define CUDA_SYMBOL_STRING(x) STRINGIFY(x)
 
-#define CU_HOOK_PRINT(args...) { fprintf(stderr, "CUDA Hook Library: "args); }
+#define CU_HOOK_PRINT(args...) { fprintf(stderr, "CUDA Hook Library: " args); }
 #define CU_HOOK_DIE_IF(condition, args...)        \
     do {                                          \
         if (condition) {                          \

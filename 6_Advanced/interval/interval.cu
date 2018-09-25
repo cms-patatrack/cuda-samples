@@ -47,14 +47,6 @@ int main(int argc,char *argv[])
     cudaGetDeviceProperties(&deviceProp, devID);
     printf("> GPU Device has Compute Capabilities SM %d.%d\n\n", deviceProp.major, deviceProp.minor);
 
-    int version = (deviceProp.major * 0x10 + deviceProp.minor);
-
-    if (version < 0x13)
-    {
-        printf("%s: requires minimum of Compute Capability 1.3 or higher, waiving test...\n", sSDKsample);
-        exit(EXIT_SUCCESS);
-    }
-
     switch (implementation_choice)
     {
         case 0:
@@ -66,16 +58,7 @@ int main(int argc,char *argv[])
             break;
 
         case 2:
-            if (deviceProp.major >= 2)
-            {
-                printf("GPU recursive implementation (requires Compute SM 2.0+)\n");
-            }
-            else
-            {
-                printf("GPU naive implementation is used instead of the recursive implementation, which requires a GPU with CUDA capability 2.0+\n");
-                implementation_choice = 0;
-            }
-
+            printf("GPU recursive implementation (requires Compute SM 2.0+)\n");
             break;
 
         default:
@@ -93,18 +76,11 @@ int main(int argc,char *argv[])
     CHECKED_CALL(cudaEventCreate(&start));
     CHECKED_CALL(cudaEventCreate(&stop));
 
-    if (deviceProp.major >= 2)
-    {
-        // We need L1 cache to store the stack (only applicable to sm_20 and higher)
-        CHECKED_CALL(cudaFuncSetCacheConfig(test_interval_newton<T>, cudaFuncCachePreferL1));
+    // We need L1 cache to store the stack (only applicable to sm_20 and higher)
+    CHECKED_CALL(cudaFuncSetCacheConfig(test_interval_newton<T>, cudaFuncCachePreferL1));
 
-        // Increase the stack size large enough for the non-inlined and recursive function calls (only applicable to sm_20 and higher)
-#if CUDART_VERSION >= 4000
-        CHECKED_CALL(cudaDeviceSetLimit(cudaLimitStackSize, 8192));
-#else
-        CHECKED_CALL(cudaThreadSetLimit(cudaLimitStackSize, 8192));
-#endif
-    }
+    // Increase the stack size large enough for the non-inlined and recursive function calls (only applicable to sm_20 and higher)
+    CHECKED_CALL(cudaDeviceSetLimit(cudaLimitStackSize, 8192));
 
     interval_gpu<T> i(0.01f, 4.0f);
     std::cout << "Searching for roots in [" << i.lower() << ", " << i.upper() << "]...\n";

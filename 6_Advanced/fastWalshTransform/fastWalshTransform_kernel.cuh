@@ -16,6 +16,9 @@
 #ifndef fwt_kernel_cuh
 #define fwt_kernel_cuh
 
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -26,6 +29,8 @@
 
 __global__ void fwtBatch1Kernel(float *d_Output, float *d_Input, int log2N)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     const int    N = 1 << log2N;
     const int base = blockIdx.x << log2N;
 
@@ -50,7 +55,7 @@ __global__ void fwtBatch1Kernel(float *d_Output, float *d_Input, int log2N)
         int i2 = i1 + stride;
         int i3 = i2 + stride;
 
-        __syncthreads();
+        cg::sync(cta);
         float D0 = s_data[i0];
         float D1 = s_data[i1];
         float D2 = s_data[i2];
@@ -74,7 +79,7 @@ __global__ void fwtBatch1Kernel(float *d_Output, float *d_Input, int log2N)
     //Do single radix-2 stage for odd power of two
     if (log2N & 1)
     {
-        __syncthreads();
+        cg::sync(cta);
 
         for (int pos = threadIdx.x; pos < N / 2; pos += blockDim.x)
         {
@@ -88,7 +93,7 @@ __global__ void fwtBatch1Kernel(float *d_Output, float *d_Input, int log2N)
         }
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     for (int pos = threadIdx.x; pos < N; pos += blockDim.x)
     {

@@ -182,6 +182,29 @@ ifneq ($(TARGET_ARCH),$(HOST_ARCH))
     endif
 endif
 
+ifeq ($(TARGET_OS),qnx)
+    CCFLAGS += -DWIN_INTERFACE_CUSTOM
+    LDFLAGS += -lsocket
+endif
+
+# Install directory of different arch
+CUDA_INSTALL_TARGET_DIR :=
+ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-linux)
+    CUDA_INSTALL_TARGET_DIR = targets/armv7-linux-gnueabihf/
+else ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-linux)
+    CUDA_INSTALL_TARGET_DIR = targets/aarch64-linux/
+else ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-android)
+    CUDA_INSTALL_TARGET_DIR = targets/armv7-linux-androideabi/
+else ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-android)
+    CUDA_INSTALL_TARGET_DIR = targets/aarch64-linux-androideabi/
+else ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-qnx)
+    CUDA_INSTALL_TARGET_DIR = targets/ARMv7-linux-QNX/
+else ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-qnx)
+    CUDA_INSTALL_TARGET_DIR = targets/aarch64-qnx/
+else ifeq ($(TARGET_ARCH),ppc64le)
+    CUDA_INSTALL_TARGET_DIR = targets/ppc64le-linux/
+endif
+
 # Debug build flags
 ifeq ($(dbg),1)
       NVCCFLAGS += -g -G
@@ -199,14 +222,6 @@ ALL_CCFLAGS += $(addprefix -Xcompiler ,$(EXTRA_CCFLAGS))
 UBUNTU = $(shell lsb_release -i -s 2>/dev/null | grep -i ubuntu)
 
 SAMPLE_ENABLED := 1
-
-# This sample is not supported on Linux x86_64
-ifeq ($(TARGET_OS),linux)
-  ifeq ($(TARGET_ARCH),x86_64)
-    $(info >>> WARNING - EGLStreams_CUDA_Interop is not supported on Linux x86_64 - waiving sample <<<)
-    SAMPLE_ENABLED := 0
-  endif
-endif
 
 # This sample is not supported on Mac OSX
 ifeq ($(TARGET_OS),darwin)
@@ -234,7 +249,7 @@ ifneq ($(TARGET_OS),darwin)
 endif
 
 # Gencode arguments
-SMS ?= 32 53 62
+SMS ?= 30 35 37 50 52 60 70
 
 ifeq ($(SMS),)
 $(info >>> WARNING - no SM architectures have been specified - waiving sample <<<)
@@ -255,54 +270,36 @@ endif
 ifeq ($(TARGET_OS),darwin)
   ALL_LDFLAGS += -Xcompiler -F/Library/Frameworks -Xlinker -framework -Xlinker CUDA
 else
-  CUDA_SEARCH_PATH ?=
-  ifneq ($(TARGET_ARCH),$(HOST_ARCH))
-    ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-linux)
-      ifneq ($(TARGET_FS),)
-        LIBRARIES += -L$(TARGET_FS)/usr/lib
-        CUDA_SEARCH_PATH += $(TARGET_FS)/usr/lib
-        CUDA_SEARCH_PATH += $(TARGET_FS)/usr/lib/arm-linux-gnueabihf
-      endif
-      CUDA_SEARCH_PATH += $(CUDA_PATH)/targets/armv7-linux-gnueabihf/lib/stubs
-      CUDA_SEARCH_PATH += /usr/arm-linux-gnueabihf/lib
-    else ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-linux)
-      CUDA_SEARCH_PATH += $(CUDA_PATH)/targets/aarch64-linux/lib/stubs
-    else ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-android)
-      CUDA_SEARCH_PATH += $(CUDA_PATH)/targets/armv7-linux-androideabi/lib/stubs
-    else ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-android)
-      CUDA_SEARCH_PATH += $(CUDA_PATH)/targets/aarch64-linux-androideabi/lib/stubs
-    else ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-qnx)
-      CUDA_SEARCH_PATH += $(CUDA_PATH)/targets/ARMv7-linux-QNX/lib/stubs
-    else ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-qnx)
-      CUDA_SEARCH_PATH += $(CUDA_PATH)/targets/aarch64-qnx/lib/stubs
-    else ifeq ($(TARGET_ARCH)-$(TARGET_OS),ppc64le-linux)
-      CUDA_SEARCH_PATH += $(CUDA_PATH)/targets/ppc64le-linux/lib/stubs
-    endif
-  else
-    ifneq ($(UBUNTU),)
-      CUDA_SEARCH_PATH += /usr/lib
-    else
-      CUDA_SEARCH_PATH += /usr/lib64
-    endif
+  ifeq ($(TARGET_ARCH),x86_64)
+    CUDA_SEARCH_PATH ?= $(CUDA_PATH)/lib64/stubs
+  endif
 
-    ifeq ($(TARGET_ARCH),x86_64)
-      CUDA_SEARCH_PATH += $(CUDA_PATH)/lib64/stubs
-    endif
+  ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-linux)
+    CUDA_SEARCH_PATH ?= $(CUDA_PATH)/targets/armv7-linux-gnueabihf/lib/stubs
+  endif
 
-    ifeq ($(TARGET_ARCH),armv7l)
-      CUDA_SEARCH_PATH += $(CUDA_PATH)/targets/armv7-linux-gnueabihf/lib/stubs
-      CUDA_SEARCH_PATH += /usr/lib/arm-linux-gnueabihf
-    endif
+  ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-linux)
+    CUDA_SEARCH_PATH ?= $(CUDA_PATH)/targets/aarch64-linux/lib/stubs
+  endif
 
-    ifeq ($(TARGET_ARCH),aarch64)
-      CUDA_SEARCH_PATH += /usr/lib
-      CUDA_SEARCH_PATH += $(CUDA_PATH)/targets/aarch64-linux/lib/stubs
-    endif
+  ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-android)
+    CUDA_SEARCH_PATH ?= $(CUDA_PATH)/targets/armv7-linux-androideabi/lib/stubs
+  endif
 
-    ifeq ($(TARGET_ARCH),ppc64le)
-      CUDA_SEARCH_PATH += $(CUDA_PATH)/targets/ppc64le-linux/lib/stubs
-      CUDA_SEARCH_PATH += /usr/lib/powerpc64le-linux-gnu
-    endif
+  ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-android)
+    CUDA_SEARCH_PATH ?= $(CUDA_PATH)/targets/aarch64-linux-androideabi/lib/stubs
+  endif
+
+  ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-qnx)
+    CUDA_SEARCH_PATH ?= $(CUDA_PATH)/targets/ARMv7-linux-QNX/lib/stubs
+  endif
+
+  ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-qnx)
+    CUDA_SEARCH_PATH ?= $(CUDA_PATH)/targets/aarch64-qnx/lib/stubs
+  endif
+
+  ifeq ($(TARGET_ARCH),ppc64le)
+    CUDA_SEARCH_PATH ?= $(CUDA_PATH)/targets/ppc64le-linux/lib/stubs
   endif
 
   CUDALIB ?= $(shell find -L $(CUDA_SEARCH_PATH) -maxdepth 1 -name libcuda.so)

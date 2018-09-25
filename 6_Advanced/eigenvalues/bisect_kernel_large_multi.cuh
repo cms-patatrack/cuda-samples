@@ -16,6 +16,9 @@
 #ifndef _BISECT_KERNEL_LARGE_MULTI_H_
 #define _BISECT_KERNEL_LARGE_MULTI_H_
 
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
 // includes, project
 #include "config.h"
 #include "util.h"
@@ -54,6 +57,8 @@ bisectKernelLarge_MultIntervals(float *g_d, float *g_s, const unsigned int n,
                                 float precision
                                )
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     const unsigned int tid = threadIdx.x;
 
     // left and right limits of interval
@@ -111,7 +116,7 @@ bisectKernelLarge_MultIntervals(float *g_d, float *g_s, const unsigned int n,
         compact_second_chunk = 0;
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     // read data into shared memory
     if (tid < num_threads_active)
@@ -123,7 +128,7 @@ bisectKernelLarge_MultIntervals(float *g_d, float *g_s, const unsigned int n,
         s_right_count[tid] = g_right_count[c_block_start + tid];
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     // do until all threads converged
     while (true)
@@ -137,7 +142,7 @@ bisectKernelLarge_MultIntervals(float *g_d, float *g_s, const unsigned int n,
                                 left, right, left_count, right_count,
                                 mid, all_threads_converged);
 
-        __syncthreads();
+        cg::sync(cta);
 
         // stop if all eigenvalues have been found
         if (1 == all_threads_converged)
@@ -152,9 +157,9 @@ bisectKernelLarge_MultIntervals(float *g_d, float *g_s, const unsigned int n,
         mid_count = computeNumSmallerEigenvalsLarge(g_d, g_s, n,
                                                     mid, tid, num_threads_active,
                                                     s_left, s_right,
-                                                    (left == right));
+                                                    (left == right), cta);
 
-        __syncthreads();
+        cg::sync(cta);
 
         if (tid < num_threads_active)
         {
@@ -184,14 +189,14 @@ bisectKernelLarge_MultIntervals(float *g_d, float *g_s, const unsigned int n,
             }
         }
 
-        __syncthreads();
+        cg::sync(cta);
 
         // compact second chunk of intervals if any of the threads generated
         // two child intervals
         if (1 == compact_second_chunk)
         {
 
-            createIndicesCompaction(s_compaction_list_exc, num_threads_compaction);
+            createIndicesCompaction(s_compaction_list_exc, num_threads_compaction, cta);
 
             compactIntervals(s_left, s_right, s_left_count, s_right_count,
                              mid, right, mid_count, right_count,
@@ -199,7 +204,7 @@ bisectKernelLarge_MultIntervals(float *g_d, float *g_s, const unsigned int n,
                              is_active_second);
         }
 
-        __syncthreads();
+        cg::sync(cta);
 
         // update state variables
         if (0 == tid)
@@ -211,13 +216,13 @@ bisectKernelLarge_MultIntervals(float *g_d, float *g_s, const unsigned int n,
             all_threads_converged = 1;
         }
 
-        __syncthreads();
+        cg::sync(cta);
 
         // clear
         s_compaction_list_exc[threadIdx.x] = 0;
         s_compaction_list_exc[threadIdx.x + blockDim.x] = 0;
 
-        __syncthreads();
+        cg::sync(cta);
 
     }  // end until all threads converged
 

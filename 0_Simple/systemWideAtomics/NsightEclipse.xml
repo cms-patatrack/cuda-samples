@@ -37,6 +37,7 @@
     <scope>1:CUDA Basic Topics</scope>
   </scopes>
   <sm-arch>sm60</sm-arch>
+  <sm-arch>sm70</sm-arch>
   <supported_envs>
     <env>
       <arch>x86_64</arch>

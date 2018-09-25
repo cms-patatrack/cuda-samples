@@ -208,15 +208,6 @@ int main(int argc, char **argv)
     printf("> GPU device has %d Multi-Processors, SM %d.%d compute capabilities\n\n",
            deviceProp.multiProcessorCount, deviceProp.major, deviceProp.minor);
 
-    int version = (deviceProp.major * 0x10 + deviceProp.minor);
-
-    if (version < 0x12)
-    {
-        printf("%s: requires minimum of Compute Capability 1.2 or higher, waiving test...\n", sSDKsample);
-
-        exit(EXIT_SUCCESS);
-    }
-
     h_input  = (unsigned int *)malloc(VOTE_DATA_GROUP*warp_size * sizeof(unsigned int));
     h_result = (unsigned int *)malloc(VOTE_DATA_GROUP*warp_size * sizeof(unsigned int));
     checkCudaErrors(cudaMalloc((void **)&d_input,  VOTE_DATA_GROUP*warp_size * sizeof(unsigned int)));

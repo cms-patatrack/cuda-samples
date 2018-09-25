@@ -14,7 +14,9 @@
 
 #ifndef _BISECT_KERNEL_LARGE_H_
 #define _BISECT_KERNEL_LARGE_H_
+#include <cooperative_groups.h>
 
+namespace cg = cooperative_groups;
 // includes, project
 #include "config.h"
 #include "util.h"
@@ -62,7 +64,8 @@ compactStreamsFinal(const unsigned int tid, const unsigned int tid_2,
                     unsigned int &left_count, unsigned int &right_count,
                     unsigned int &left_count_2, unsigned int &right_count_2,
                     unsigned int c_block_iend, unsigned int c_sum_block,
-                    unsigned int c_block_iend_2, unsigned int c_sum_block_2
+                    unsigned int c_block_iend_2, unsigned int c_sum_block_2,
+                    cg::thread_block cta
                    );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -73,7 +76,8 @@ void
 scanCompactBlocksStartAddress(const unsigned int tid, const unsigned int tid_2,
                               const unsigned int num_threads_compaction,
                               unsigned short *s_cl_blocking,
-                              unsigned short *s_cl_helper
+                              unsigned short *s_cl_helper,
+                              cg::thread_block cta
                              );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -85,7 +89,7 @@ scanSumBlocks(const unsigned int tid, const unsigned int tid_2,
               const unsigned int num_threads_active,
               const unsigned int num_threads_compaction,
               unsigned short *s_cl_blocking,
-              unsigned short *s_cl_helper
+              unsigned short *s_cl_helper, cg::thread_block cta
              );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -98,7 +102,8 @@ scanInitial(const unsigned int tid, const unsigned int tid_2,
             const unsigned int num_threads_active,
             const unsigned int num_threads_compaction,
             unsigned short *s_cl_one, unsigned short *s_cl_mult,
-            unsigned short *s_cl_blocking, unsigned short *s_cl_helper
+            unsigned short *s_cl_blocking, unsigned short *s_cl_helper,
+            cg::thread_block cta
            );
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -153,6 +158,8 @@ bisectKernelLarge(float *g_d, float *g_s, const unsigned int n,
                   unsigned int *g_blocks_mult_sum
                  )
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     const unsigned int tid = threadIdx.x;
 
     // intervals (store left and right because the subdivision tree is in general
@@ -205,7 +212,7 @@ bisectKernelLarge(float *g_d, float *g_s, const unsigned int n,
     s_left_count[tid] = 0;
     s_right_count[tid] = 0;
 
-    __syncthreads();
+    cg::sync(cta);
 
     // set up initial configuration
     if (0 == tid)
@@ -224,7 +231,7 @@ bisectKernelLarge(float *g_d, float *g_s, const unsigned int n,
         all_threads_converged = 1;
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     // for all active threads read intervals from the last level
     // the number of (worst case) active threads per level l is 2^l
@@ -236,7 +243,7 @@ bisectKernelLarge(float *g_d, float *g_s, const unsigned int n,
                                 left, right, left_count, right_count,
                                 mid, all_threads_converged);
 
-        __syncthreads();
+        cg::sync(cta);
 
         // check if done
         if (1 == all_threads_converged)
@@ -253,9 +260,9 @@ bisectKernelLarge(float *g_d, float *g_s, const unsigned int n,
                                                     mid, threadIdx.x,
                                                     num_threads_active,
                                                     s_left, s_right,
-                                                    (left == right));
+                                                    (left == right), cta);
 
-        __syncthreads();
+        cg::sync(cta);
 
         // store intervals
         // for all threads store the first child interval in a continuous chunk of
@@ -299,7 +306,7 @@ bisectKernelLarge(float *g_d, float *g_s, const unsigned int n,
         }
 
         // necessary so that compact_second_chunk is up-to-date
-        __syncthreads();
+        cg::sync(cta);
 
         // perform compaction of chunk where second children are stored
         // scan of (num_threads_active / 2) elements, thus at most
@@ -308,7 +315,7 @@ bisectKernelLarge(float *g_d, float *g_s, const unsigned int n,
         {
 
             // create indices for compaction
-            createIndicesCompaction(s_compaction_list_exc, num_threads_compaction);
+            createIndicesCompaction(s_compaction_list_exc, num_threads_compaction, cta);
 
             compactIntervals(s_left, s_right, s_left_count, s_right_count,
                              mid, right, mid_count, right_count,
@@ -316,7 +323,7 @@ bisectKernelLarge(float *g_d, float *g_s, const unsigned int n,
                              is_active_second);
         }
 
-        __syncthreads();
+        cg::sync(cta);
 
         // update state variables
         if (0 == tid)
@@ -330,7 +337,7 @@ bisectKernelLarge(float *g_d, float *g_s, const unsigned int n,
             all_threads_converged = 1;
         }
 
-        __syncthreads();
+        cg::sync(cta);
 
         if (num_threads_compaction > blockDim.x)
         {
@@ -338,7 +345,7 @@ bisectKernelLarge(float *g_d, float *g_s, const unsigned int n,
         }
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     // generate two lists of intervals; one with intervals that contain one
     // eigenvalue (or are converged), and one with intervals that need further
@@ -381,7 +388,7 @@ bisectKernelLarge(float *g_d, float *g_s, const unsigned int n,
         s_right_count[0] = 0;
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     // flag if interval contains one or multiple eigenvalues
     unsigned int is_one_lambda = 0;
@@ -421,13 +428,13 @@ bisectKernelLarge(float *g_d, float *g_s, const unsigned int n,
 
 
     scanInitial(tid, tid_2, num_threads_active, num_threads_compaction,
-                s_cl_one, s_cl_mult, s_cl_blocking, s_cl_helper);
+                s_cl_one, s_cl_mult, s_cl_blocking, s_cl_helper, cta);
 
     scanSumBlocks(tid, tid_2, num_threads_active,
-                  num_threads_compaction, s_cl_blocking, s_cl_helper);
+                  num_threads_compaction, s_cl_blocking, s_cl_helper, cta);
 
     // end down sweep of scan
-    __syncthreads();
+    cg::sync(cta);
 
     unsigned int  c_block_iend = 0;
     unsigned int  c_block_iend_2 = 0;
@@ -454,11 +461,11 @@ bisectKernelLarge(float *g_d, float *g_s, const unsigned int n,
     }
 
     scanCompactBlocksStartAddress(tid, tid_2, num_threads_compaction,
-                                  s_cl_blocking, s_cl_helper);
+                                  s_cl_blocking, s_cl_helper, cta);
 
 
     // finished second scan for s_cl_blocking
-    __syncthreads();
+    cg::sync(cta);
 
     // determine the global results
     __shared__  unsigned int num_blocks_mult;
@@ -476,7 +483,7 @@ bisectKernelLarge(float *g_d, float *g_s, const unsigned int n,
         *g_num_blocks_mult = num_blocks_mult;
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     float left_2, right_2;
     --s_cl_one;
@@ -488,10 +495,10 @@ bisectKernelLarge(float *g_d, float *g_s, const unsigned int n,
                         is_one_lambda, is_one_lambda_2,
                         left, right, left_2, right_2,
                         left_count, right_count, left_count_2, right_count_2,
-                        c_block_iend, c_sum_block, c_block_iend_2, c_sum_block_2
+                        c_block_iend, c_sum_block, c_block_iend_2, c_sum_block_2, cta
                        );
 
-    __syncthreads();
+    cg::sync(cta);
 
     // final adjustment before writing out data to global memory
     if (0 == tid)
@@ -500,7 +507,7 @@ bisectKernelLarge(float *g_d, float *g_s, const unsigned int n,
         s_cl_helper[0] = 0;
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     // write to global memory
     writeToGmem(tid, tid_2, num_threads_active, num_blocks_mult,
@@ -604,7 +611,8 @@ compactStreamsFinal(const unsigned int tid, const unsigned int tid_2,
                     unsigned int &left_count, unsigned int &right_count,
                     unsigned int &left_count_2, unsigned int &right_count_2,
                     unsigned int c_block_iend, unsigned int c_sum_block,
-                    unsigned int c_block_iend_2, unsigned int c_sum_block_2
+                    unsigned int c_block_iend_2, unsigned int c_sum_block_2,
+                    cg::thread_block cta
                    )
 {
     // cache data before performing compaction
@@ -618,7 +626,7 @@ compactStreamsFinal(const unsigned int tid, const unsigned int tid_2,
         right_2 = s_right[tid_2];
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     // determine addresses for intervals containing multiple eigenvalues and
     // addresses for blocks of intervals
@@ -646,7 +654,7 @@ compactStreamsFinal(const unsigned int tid, const unsigned int tid_2,
         }
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     // store compactly in shared mem
     s_left[ptr_w] = left;
@@ -686,7 +694,7 @@ void
 scanCompactBlocksStartAddress(const unsigned int tid, const unsigned int tid_2,
                               const unsigned int num_threads_compaction,
                               unsigned short *s_cl_blocking,
-                              unsigned short *s_cl_helper
+                              unsigned short *s_cl_helper, cg::thread_block cta
                              )
 {
     // prepare for second step of block generation: compaction of the block
@@ -698,7 +706,7 @@ scanCompactBlocksStartAddress(const unsigned int tid, const unsigned int tid_2,
         s_cl_blocking[tid_2] = s_cl_helper[tid_2];
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     // additional scan to compact s_cl_blocking that permits to generate a
     // compact list of eigenvalue blocks each one containing about
@@ -711,7 +719,7 @@ scanCompactBlocksStartAddress(const unsigned int tid, const unsigned int tid_2,
     for (int d = (num_threads_compaction >> 1); d > 0; d >>= 1)
     {
 
-        __syncthreads();
+        cg::sync(cta);
 
         if (tid < d)
         {
@@ -729,7 +737,7 @@ scanCompactBlocksStartAddress(const unsigned int tid, const unsigned int tid_2,
     {
 
         offset >>= 1;
-        __syncthreads();
+        cg::sync(cta);
 
         //
         if (tid < (d-1))
@@ -752,7 +760,7 @@ scanSumBlocks(const unsigned int tid, const unsigned int tid_2,
               const unsigned int num_threads_active,
               const unsigned int num_threads_compaction,
               unsigned short *s_cl_blocking,
-              unsigned short *s_cl_helper)
+              unsigned short *s_cl_helper, cg::thread_block cta)
 {
     unsigned int offset = 1;
 
@@ -761,7 +769,7 @@ scanSumBlocks(const unsigned int tid, const unsigned int tid_2,
     for (int d = num_threads_compaction >> 1; d > 0; d >>= 1)
     {
 
-        __syncthreads();
+        cg::sync(cta);
 
         if (tid < d)
         {
@@ -781,7 +789,7 @@ scanSumBlocks(const unsigned int tid, const unsigned int tid_2,
     {
 
         offset >>= 1;
-        __syncthreads();
+        cg::sync(cta);
 
         if (tid < (d-1))
         {
@@ -793,7 +801,7 @@ scanSumBlocks(const unsigned int tid, const unsigned int tid_2,
         }
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     if (0 == tid)
     {
@@ -818,7 +826,8 @@ scanInitial(const unsigned int tid, const unsigned int tid_2,
             const unsigned int num_threads_active,
             const unsigned int num_threads_compaction,
             unsigned short *s_cl_one, unsigned short *s_cl_mult,
-            unsigned short *s_cl_blocking, unsigned short *s_cl_helper
+            unsigned short *s_cl_blocking, unsigned short *s_cl_helper,
+            cg::thread_block cta
            )
 {
 
@@ -833,7 +842,7 @@ scanInitial(const unsigned int tid, const unsigned int tid_2,
     for (int d = (num_threads_compaction >> 1); d > 0; d >>= 1)
     {
 
-        __syncthreads();
+        cg::sync(cta);
 
         if (tid < d)
         {
@@ -897,7 +906,7 @@ scanInitial(const unsigned int tid, const unsigned int tid_2,
     {
 
         offset >>= 1;
-        __syncthreads();
+        cg::sync(cta);
 
         //
         if (tid < (d-1))
@@ -942,7 +951,7 @@ storeNonEmptyIntervalsLarge(unsigned int addr,
 
         is_active_second = 1;
         s_compaction_list[threadIdx.x] = 1;
-        compact_second_chunk = 1;
+        atomicExch(&compact_second_chunk, 1);
     }
     else
     {

@@ -154,12 +154,12 @@ void CheckEvents(void)
                     break;
 
                case SCREEN_EVENT_KEYBOARD:
-                    rc = screen_get_event_property_iv(screen_ev, SCREEN_PROPERTY_KEY_FLAGS, &val);
+                    rc = screen_get_event_property_iv(screen_ev, SCREEN_PROPERTY_FLAGS, &val);
                     if (rc || val == SCREEN_EVENT_NONE) {
                         break;
                     }
                     if (val & KEY_DOWN) {
-                        rc = screen_get_event_property_iv(screen_ev, SCREEN_PROPERTY_KEY_SYM, &val);
+                        rc = screen_get_event_property_iv(screen_ev, SCREEN_PROPERTY_SYM, &val);
                         if (rc || val == SCREEN_EVENT_NONE) {
                             break;
                         }

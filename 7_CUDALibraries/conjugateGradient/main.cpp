@@ -102,15 +102,6 @@ int main(int argc, char **argv)
     printf("> GPU device has %d Multi-Processors, SM %d.%d compute capabilities\n\n",
            deviceProp.multiProcessorCount, deviceProp.major, deviceProp.minor);
 
-    int version = (deviceProp.major * 0x10 + deviceProp.minor);
-
-    if (version < 0x11)
-    {
-        printf("%s: requires a minimum CUDA compute 1.1 capability\n", sSDKname);
-
-        exit(EXIT_SUCCESS);
-    }
-
     /* Generate a random tridiagonal symmetric matrix in CSR format */
     M = N = 1048576;
     nz = (N-2)*3 + 4;
@@ -199,7 +190,7 @@ int main(int argc, char **argv)
 
         r0 = r1;
         cublasStatus = cublasSdot(cublasHandle, N, d_r, 1, d_r, 1, &r1);
-        cudaThreadSynchronize();
+        cudaDeviceSynchronize();
         printf("iteration = %3d, residual = %e\n", k, sqrt(r1));
         k++;
     }

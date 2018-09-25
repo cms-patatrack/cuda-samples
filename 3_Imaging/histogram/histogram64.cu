@@ -13,6 +13,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
 #include <helper_cuda.h>
 #include "histogram_common.h"
 
@@ -46,6 +49,8 @@ inline __device__ void addWord(uchar *s_ThreadBase, uint data)
 
 __global__ void histogram64Kernel(uint *d_PartialHistograms, data_t *d_Data, uint dataCount)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     //Encode thread index in order to avoid bank conflicts in s_Hist[] access:
     //each group of SHARED_MEMORY_BANKS threads accesses consecutive shared memory banks
     //and the same bytes [0..3] within the banks
@@ -69,7 +74,7 @@ __global__ void histogram64Kernel(uint *d_PartialHistograms, data_t *d_Data, uin
 
     //Read data from global memory and submit to the shared-memory histogram
     //Since histogram counters are byte-sized, every single thread can't do more than 255 submission
-    __syncthreads();
+    cg::sync(cta);
 
     for (uint pos = UMAD(blockIdx.x, blockDim.x, threadIdx.x); pos < dataCount; pos += UMUL(blockDim.x, gridDim.x))
     {
@@ -81,7 +86,7 @@ __global__ void histogram64Kernel(uint *d_PartialHistograms, data_t *d_Data, uin
     }
 
     //Accumulate per-thread histograms into per-block and write to global memory
-    __syncthreads();
+    cg::sync(cta);
 
     if (threadIdx.x < HISTOGRAM64_BIN_COUNT)
     {
@@ -122,6 +127,8 @@ __global__ void mergeHistogram64Kernel(
     uint histogramCount
 )
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     __shared__ uint data[MERGE_THREADBLOCK_SIZE];
 
     uint sum = 0;
@@ -135,7 +142,7 @@ __global__ void mergeHistogram64Kernel(
 
     for (uint stride = MERGE_THREADBLOCK_SIZE / 2; stride > 0; stride >>= 1)
     {
-        __syncthreads();
+        cg::sync(cta);
 
         if (threadIdx.x < stride)
         {

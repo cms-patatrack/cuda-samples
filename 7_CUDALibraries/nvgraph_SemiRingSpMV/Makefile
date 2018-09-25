@@ -182,6 +182,29 @@ ifneq ($(TARGET_ARCH),$(HOST_ARCH))
     endif
 endif
 
+ifeq ($(TARGET_OS),qnx)
+    CCFLAGS += -DWIN_INTERFACE_CUSTOM
+    LDFLAGS += -lsocket
+endif
+
+# Install directory of different arch
+CUDA_INSTALL_TARGET_DIR :=
+ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-linux)
+    CUDA_INSTALL_TARGET_DIR = targets/armv7-linux-gnueabihf/
+else ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-linux)
+    CUDA_INSTALL_TARGET_DIR = targets/aarch64-linux/
+else ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-android)
+    CUDA_INSTALL_TARGET_DIR = targets/armv7-linux-androideabi/
+else ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-android)
+    CUDA_INSTALL_TARGET_DIR = targets/aarch64-linux-androideabi/
+else ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-qnx)
+    CUDA_INSTALL_TARGET_DIR = targets/ARMv7-linux-QNX/
+else ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-qnx)
+    CUDA_INSTALL_TARGET_DIR = targets/aarch64-qnx/
+else ifeq ($(TARGET_ARCH),ppc64le)
+    CUDA_INSTALL_TARGET_DIR = targets/ppc64le-linux/
+endif
+
 # Debug build flags
 ifeq ($(dbg),1)
       NVCCFLAGS += -g -G
@@ -200,13 +223,13 @@ SAMPLE_ENABLED := 1
 
 # This sample is not supported on ARMv7
 ifeq ($(TARGET_ARCH),armv7l)
-  $(info >>> WARNING - nvgraph_SemiRingSpmv is not supported on ARMv7 - waiving sample <<<)
+  $(info >>> WARNING - nvgraph_SemiRingSpMV is not supported on ARMv7 - waiving sample <<<)
   SAMPLE_ENABLED := 0
 endif
 
 # This sample is not supported on aarch64
 ifeq ($(TARGET_ARCH),aarch64)
-  $(info >>> WARNING - nvgraph_SemiRingSpmv is not supported on aarch64 - waiving sample <<<)
+  $(info >>> WARNING - nvgraph_SemiRingSpMV is not supported on aarch64 - waiving sample <<<)
   SAMPLE_ENABLED := 0
 endif
 
@@ -222,7 +245,7 @@ LIBRARIES :=
 ################################################################################
 
 # Gencode arguments
-SMS ?= 30 35 37 50 52 60
+SMS ?= 30 35 37 50 52 60 70
 
 ifeq ($(SMS),)
 $(info >>> WARNING - no SM architectures have been specified - waiving sample <<<)
@@ -251,7 +274,7 @@ endif
 # Target rules
 all: build
 
-build: nvgraph_SemiRingSpmv
+build: nvgraph_SemiRingSpMV
 
 check.deps:
 ifeq ($(SAMPLE_ENABLED),0)
@@ -260,19 +283,19 @@ else
 	@echo "Sample is ready - all dependencies have been met"
 endif
 
-nvgraph_SemiRingSpmv.o:nvgraph_SemiRingSpmv.cpp
+nvgraph_SemiRingSpMV.o:nvgraph_SemiRingSpMV.cpp
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
 
-nvgraph_SemiRingSpmv: nvgraph_SemiRingSpmv.o
+nvgraph_SemiRingSpMV: nvgraph_SemiRingSpMV.o
 	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
 	$(EXEC) mkdir -p ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
 	$(EXEC) cp $@ ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
 
 run: build
-	$(EXEC) ./nvgraph_SemiRingSpmv
+	$(EXEC) ./nvgraph_SemiRingSpMV
 
 clean:
-	rm -f nvgraph_SemiRingSpmv nvgraph_SemiRingSpmv.o
-	rm -rf ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)/nvgraph_SemiRingSpmv
+	rm -f nvgraph_SemiRingSpMV nvgraph_SemiRingSpMV.o
+	rm -rf ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)/nvgraph_SemiRingSpMV
 
 clobber: clean

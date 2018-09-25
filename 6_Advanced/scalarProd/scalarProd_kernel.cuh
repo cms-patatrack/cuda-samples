@@ -9,7 +9,9 @@
  *
  */
 
+#include <cooperative_groups.h>
 
+namespace cg = cooperative_groups;
 
 ///////////////////////////////////////////////////////////////////////////////
 // On G80-class hardware 24-bit multiplication takes 4 clocks per warp
@@ -39,6 +41,8 @@ __global__ void scalarProdGPU(
     int elementN
 )
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     //Accumulators cache
     __shared__ float accumResult[ACCUM_N];
 
@@ -74,11 +78,13 @@ __global__ void scalarProdGPU(
         ////////////////////////////////////////////////////////////////////////
         for (int stride = ACCUM_N / 2; stride > 0; stride >>= 1)
         {
-            __syncthreads();
+            cg::sync(cta);
 
             for (int iAccum = threadIdx.x; iAccum < stride; iAccum += blockDim.x)
                 accumResult[iAccum] += accumResult[stride + iAccum];
         }
+
+        cg::sync(cta);
 
         if (threadIdx.x == 0) d_C[vec] = accumResult[0];
     }

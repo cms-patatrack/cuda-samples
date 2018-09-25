@@ -90,20 +90,9 @@ void runTest(int argc, const char **argv)
         int devID;
 
         //cudaError_t error;
-        cudaDeviceProp deviceProp;
 
         // This will pick the best possible CUDA capable device.
         devID = findCudaDevice(argc, (const char **) argv);
-
-        checkCudaErrors(cudaGetDeviceProperties(&deviceProp, devID));
-
-        if (deviceProp.major < 2)
-        {
-            cout << sampleName
-                 << " requires a GPU with compute capability "
-                 << "2.0 or later, exiting..." << endl;
-            exit(EXIT_SUCCESS);
-        }
 
         // Create host vector.
         const uint kVectorSize = 1000;

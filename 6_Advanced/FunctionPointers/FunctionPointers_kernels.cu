@@ -11,6 +11,10 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
+
 #include <helper_cuda.h>
 
 #include "FunctionPointers_kernels.h"
@@ -141,6 +145,8 @@ SobelShared(uchar4 *pSobelOriginal, unsigned short SobelPitch,
             int blockOperation, pointFunction_t pPointFunction
            )
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     short u = 4*blockIdx.x*BlockWidth;
     short v = blockIdx.y*blockDim.y + threadIdx.y;
     short ib;
@@ -179,7 +185,7 @@ SobelShared(uchar4 *pSobelOriginal, unsigned short SobelPitch,
         }
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     u >>= 2;    // index as uchar4 from here
     uchar4 *pSobel = (uchar4 *)(((char *) pSobelOriginal)+v*SobelPitch);
@@ -242,7 +248,7 @@ SobelShared(uchar4 *pSobelOriginal, unsigned short SobelPitch,
 
     }
 
-    __syncthreads();
+    cg::sync(cta);
 }
 
 __global__ void

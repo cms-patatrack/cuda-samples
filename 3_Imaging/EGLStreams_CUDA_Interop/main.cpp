@@ -110,13 +110,13 @@ int main(int argc, char **argv)
         args.inputHeight       = HEIGHT;
         if (i%2 != 0) {
             args.isARGB        = 1;
-            args.infile1       = "cuda_f_1.yuv";
-            args.infile2       = "cuda_f_2.yuv";
+            args.infile1       = sdkFindFilePath("cuda_f_1.yuv", argv[0]);
+            args.infile2       = sdkFindFilePath("cuda_f_2.yuv", argv[0]);
         }
         else {
             args.isARGB        = 0;
-            args.infile1       = "cuda_yuv_f_1.yuv";
-            args.infile2       = "cuda_yuv_f_2.yuv";
+            args.infile1       = sdkFindFilePath("cuda_yuv_f_1.yuv", argv[0]);
+            args.infile2       = sdkFindFilePath("cuda_yuv_f_2.yuv", argv[0]);
         }
         if ((i % 4) < 2) {
             args.pitchLinearOutput = 1;

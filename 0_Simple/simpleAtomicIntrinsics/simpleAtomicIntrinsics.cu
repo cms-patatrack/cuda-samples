@@ -84,15 +84,6 @@ void runTest(int argc, char **argv)
            "SM %d.%d compute capabilities\n\n",
            deviceProp.multiProcessorCount, deviceProp.major, deviceProp.minor);
 
-    int version = (deviceProp.major * 0x10 + deviceProp.minor);
-
-    if (version < 0x11)
-    {
-        printf("%s: requires a minimum CUDA compute 1.1 capability, waiving testing.\n",
-               sampleName);
-        exit(EXIT_WAIVED);
-    }
-
     StopWatchInterface *timer;
     sdkCreateTimer(&timer);
     sdkStartTimer(&timer);

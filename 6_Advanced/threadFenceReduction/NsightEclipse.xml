@@ -10,6 +10,7 @@
     <path>../../common/inc</path>
   </includepaths>
   <keyconcepts>
+    <concept level="basic">Cooperative Groups</concept>
     <concept level="advanced">Data-Parallel Algorithms</concept>
     <concept level="advanced">Performance Strategies</concept>
   </keyconcepts>
@@ -27,13 +28,13 @@
     <scope>1:Data-Parallel Algorithms</scope>
     <scope>1:Performance Strategies</scope>
   </scopes>
-  <sm-arch>sm20</sm-arch>
   <sm-arch>sm30</sm-arch>
   <sm-arch>sm35</sm-arch>
   <sm-arch>sm37</sm-arch>
   <sm-arch>sm50</sm-arch>
   <sm-arch>sm52</sm-arch>
   <sm-arch>sm60</sm-arch>
+  <sm-arch>sm70</sm-arch>
   <supported_envs>
     <env>
       <arch>x86_64</arch>

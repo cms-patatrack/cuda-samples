@@ -12,10 +12,16 @@
 #ifndef NV_IMAGE_GL
 #define NV_IMAGE_GL
 
-#include <cuda.h>
+#include "dynlink_cuda.h" // <cuda.h>
+#include "dynlink_cudaGL.h" //<cudaGL.h>
 
-#define HELPERGL_EXTERN_GL_FUNC_IMPLEMENTATION
-#include <helper_gl.h>
+#include <GL/glew.h>
+
+#if defined(__APPLE__) || defined(__MACOSX)
+#include <GLUT/glut.h>
+#else
+#include <GL/freeglut.h>
+#endif
 
 #define PAD_ALIGN(x,mask) ( (x + mask) & ~mask )
 
@@ -53,7 +59,7 @@ class ImageGL
 
         ImageGL(unsigned int nDispWidth, unsigned int nDispHeight,
                 unsigned int nTexWidth,  unsigned int nTexHeight,
-                bool bIsProgressive,
+                bool bVsync,  
                 PixelFormat ePixelFormat = BGRA_PIXEL_FORMAT);
 
         // Destructor
@@ -150,8 +156,8 @@ class ImageGL
         }
 
     private:
-        GLuint gl_pbo_[2];     // OpenGL pixel buffer object
-        GLuint gl_texid_[2];   // Texture resource for rendering
+        GLuint gl_pbo_[3];     // OpenGL pixel buffer object
+        GLuint gl_texid_[3];   // Texture resource for rendering
         GLuint gl_shader_;
 
         unsigned int nWidth_;
@@ -159,7 +165,7 @@ class ImageGL
         unsigned int nTexWidth_;
         unsigned int nTexHeight_;
         PixelFormat e_PixFmt_;
-        bool bIsProgressive_;
+        bool bVsync_;
         bool bIsCudaResource_;
 
         CUcontext oContext_;

@@ -355,7 +355,7 @@
 
 #  ifdef BOOST_NO_STD_MIN_MAX
 
-namespace std {
+namespace std_ns {
   template <class _Tp>
   inline const _Tp& min BOOST_PREVENT_MACRO_SUBSTITUTION (const _Tp& __a, const _Tp& __b) {
     return __b < __a ? __b : __a;

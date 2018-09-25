@@ -46,7 +46,7 @@ int main(int argc, char **argv)
 
     // Compile the kernels
     char *kernel_file = sdkFindFilePath("quasirandomGenerator_kernel.cu", argv[0]);
-    compileFileToPTX(kernel_file, 0, NULL, &ptx, &ptxSize);
+    compileFileToPTX(kernel_file, argc, argv, &ptx, &ptxSize, 0);
     module = loadPTX(ptx, argc, argv);
 
     unsigned int tableCPU[QRNG_DIMENSIONS][QRNG_RESOLUTION];

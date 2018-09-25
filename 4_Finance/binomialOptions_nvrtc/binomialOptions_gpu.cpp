@@ -58,7 +58,7 @@ extern "C" void binomialOptionsGPU(
 {
     if (!moduleLoaded) {
       kernel_file = sdkFindFilePath("binomialOptions_kernel.cu", argv[0]);
-      compileFileToPTX(kernel_file, 0, NULL, &ptx, &ptxSize);
+      compileFileToPTX(kernel_file, argc, argv, &ptx, &ptxSize, 0);
       module = loadPTX(ptx, argc, argv);
       moduleLoaded = true;
     }

@@ -190,14 +190,14 @@ int main(int argc, char **argv)
 
         r0 = r1;
         cublasStatus = cublasSdot(cublasHandle, N, r, 1, r, 1, &r1);
-        cudaThreadSynchronize();
+        cudaDeviceSynchronize();
         printf("iteration = %3d, residual = %e\n", k, sqrt(r1));
         k++;
     }
 
     printf("Final residual: %e\n",sqrt(r1));
 
-    fprintf(stdout,"&&&& uvm_cg test %s\n", (sqrt(r1) < tol) ? "PASSED" : "FAILED");
+    fprintf(stdout,"&&&& conjugateGradientUM %s\n", (sqrt(r1) < tol) ? "PASSED" : "FAILED");
 
     float rsum, diff, err = 0.0;
 

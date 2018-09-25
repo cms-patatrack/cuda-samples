@@ -1,5 +1,6 @@
 // Utility function to extract unsigned chars from an
 // unsigned integer
+
 __device__ uchar4 int_to_uchar4(unsigned int in)
 {
     uchar4 bytes;
@@ -80,7 +81,8 @@ __global__ void shfl_intimage_rows(uint4 *img, uint4 *integral_image)
 
     for (int i=1 ; i<32 ; i*=2)
     {
-        int n = __shfl_up(sum, i, 32);
+        unsigned int mask = 0xffffffff;
+        int n = __shfl_up_sync(mask, sum, i, 32);
 
         if (lane_id >= i)
         {
@@ -117,7 +119,8 @@ __global__ void shfl_intimage_rows(uint4 *img, uint4 *integral_image)
 
         for (int i=1; i<=32; i*=2)
         {
-            int n = __shfl_up(warp_sum, i, 32);
+            unsigned int mask = 0xffffffff;
+            int n = __shfl_up_sync(mask, warp_sum, i, 32);
 
             if (lane_id >= i) warp_sum += n;
         }
@@ -177,21 +180,22 @@ __global__ void shfl_intimage_rows(uint4 *img, uint4 *integral_image)
          four integers to be written as uint4's to GMEM.
     */
 
+    unsigned int mask = 0xffffffff;
     uint4 output;
-    result[4] = __shfl_xor(result[4], 1, 32);
-    result[5] = __shfl_xor(result[5], 1, 32);
-    result[6] = __shfl_xor(result[6], 1, 32);
-    result[7] = __shfl_xor(result[7], 1, 32);
+    result[4] = __shfl_xor_sync(mask, result[4], 1, 32);
+    result[5] = __shfl_xor_sync(mask, result[5], 1, 32);
+    result[6] = __shfl_xor_sync(mask, result[6], 1, 32);
+    result[7] = __shfl_xor_sync(mask, result[7], 1, 32);
 
-    result[8] = __shfl_xor(result[8], 2, 32);
-    result[9] = __shfl_xor(result[9], 2, 32);
-    result[10] = __shfl_xor(result[10], 2, 32);
-    result[11] = __shfl_xor(result[11], 2, 32);
+    result[8] = __shfl_xor_sync(mask, result[8], 2, 32);
+    result[9] = __shfl_xor_sync(mask, result[9], 2, 32);
+    result[10] = __shfl_xor_sync(mask, result[10], 2, 32);
+    result[11] = __shfl_xor_sync(mask, result[11], 2, 32);
 
-    result[12] = __shfl_xor(result[12], 3, 32);
-    result[13] = __shfl_xor(result[13], 3, 32);
-    result[14] = __shfl_xor(result[14], 3, 32);
-    result[15] = __shfl_xor(result[15], 3, 32);
+    result[12] = __shfl_xor_sync(mask, result[12], 3, 32);
+    result[13] = __shfl_xor_sync(mask, result[13], 3, 32);
+    result[14] = __shfl_xor_sync(mask, result[14], 3, 32);
+    result[15] = __shfl_xor_sync(mask, result[15], 3, 32);
 
     if (threadIdx.x % 4 == 0)
     {
@@ -246,7 +250,7 @@ __global__ void shfl_intimage_rows(uint4 *img, uint4 *integral_image)
 
     for (int i=0; i<16; i++)
     {
-        result[i] = __shfl_xor(result[i],1, 32);
+        result[i] = __shfl_xor_sync(mask, result[i],1, 32);
     }
 
     if (threadIdx.x % 4 == 0)
@@ -316,6 +320,7 @@ __global__ void shfl_vertical_shfl(unsigned int *img, int width, int height)
     //int rows_per_thread = (height / blockDim. y) ;
     //int start_row = rows_per_thread * threadIdx.y;
     unsigned int stepSum = 0;
+    unsigned int mask = 0xffffffff;
 
     sums[threadIdx.x][threadIdx.y] = 0;
     __syncthreads();
@@ -341,7 +346,7 @@ __global__ void shfl_vertical_shfl(unsigned int *img, int width, int height)
 
         for (int i=1 ; i<=8 ; i*=2)
         {
-            int n = __shfl_up(partial_sum, i, 32);
+            int n = __shfl_up_sync(mask, partial_sum, i, 32);
 
             if (lane_id >= i) partial_sum += n;
         }

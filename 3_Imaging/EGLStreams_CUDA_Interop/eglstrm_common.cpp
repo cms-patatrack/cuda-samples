@@ -15,7 +15,6 @@
 //
 
 #include "eglstrm_common.h"
-#include <EGL/eglext_nv.h>
 
 EGLStreamKHR eglStream;
 EGLDisplay   g_display;

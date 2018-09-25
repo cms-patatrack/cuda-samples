@@ -1,5 +1,5 @@
 /*
- * Copyright 1993-2015 NVIDIA Corporation.  All rights reserved.
+ * Copyright 1993-2017 NVIDIA Corporation.  All rights reserved.
  *
  * Please refer to the NVIDIA end user license agreement (EULA) associated
  * with this source code for terms and conditions that govern your use of
@@ -12,7 +12,8 @@
 #ifndef VIDEOSOURCE_H
 #define VIDEOSOURCE_H
 
-#include <nvcuvid.h>
+#include "dynlink_nvcuvid.h" // <nvcuvid.h>
+
 #include <string>
 
 typedef struct
@@ -23,19 +24,24 @@ typedef struct
 
 static _sVideoFormats eVideoFormats[] =
 {
-    { cudaVideoCodec_MPEG1, "MPEG-1" },
-    { cudaVideoCodec_MPEG2, "MPEG-2" },
-    { cudaVideoCodec_MPEG4, "MPEG-4 (ASP)" },
-    { cudaVideoCodec_VC1,   "VC-1/WMV" },
-    { cudaVideoCodec_H264,  "AVC/H.264" },
-    { cudaVideoCodec_JPEG,  "M-JPEG" },
-    { cudaVideoCodec_NumCodecs,  "Invalid" },
-    { cudaVideoCodec_YUV420,"YUV  4:2:0" },
-    { cudaVideoCodec_YV12,  "YV12 4:2:0" },
-    { cudaVideoCodec_NV12,  "NV12 4:2:0" },
-    { cudaVideoCodec_YUYV,  "YUYV 4:2:2" },
-    { cudaVideoCodec_UYVY,  "UYVY 4:2:2" },
-    {                  -1 , "Unknown" },
+    { cudaVideoCodec_MPEG1,    "MPEG-1" },
+    { cudaVideoCodec_MPEG2,    "MPEG-2" },
+    { cudaVideoCodec_MPEG4,    "MPEG-4 (ASP)" },
+    { cudaVideoCodec_VC1,      "VC-1/WMV" },
+    { cudaVideoCodec_H264,     "AVC/H.264" },
+    { cudaVideoCodec_JPEG,     "M-JPEG" },
+	{ cudaVideoCodec_H264_SVC, "H.264/SVC" },
+	{ cudaVideoCodec_H264_MVC, "H.264/MVC" },
+	{ cudaVideoCodec_HEVC,     "H.265/HEVC" },
+    { cudaVideoCodec_VP8,      "VP8" },
+    { cudaVideoCodec_VP9,      "VP9" },
+	{ cudaVideoCodec_NumCodecs,"Invalid" },
+    { cudaVideoCodec_YUV420,   "YUV  4:2:0" },
+    { cudaVideoCodec_YV12,     "YV12 4:2:0" },
+    { cudaVideoCodec_NV12,     "NV12 4:2:0" },
+    { cudaVideoCodec_YUYV,     "YUYV 4:2:2" },
+    { cudaVideoCodec_UYVY,     "UYVY 4:2:2" },
+    {                  -1,     "Unknown" },
 };
 
 // forward declarations
@@ -108,7 +114,7 @@ class VideoSource
         struct VideoSourceData
         {
             CUvideoparser hVideoParser;
-            FrameQueue   *pFrameQueue;			
+            FrameQueue   *pFrameQueue;
         };
 
 

@@ -65,6 +65,10 @@
 #ifndef _DWTHAAR1D_KERNEL_H_
 #define _DWTHAAR1D_KERNEL_H_
 
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
+
 ////////////////////////////////////////////////////////////////////////////////
 //! @param id  input data
 //! @param od  output data
@@ -73,13 +77,15 @@
 __global__ void
 initValue(float *od, float value)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     // position of write into global memory
     unsigned int index = (blockIdx.x * blockDim.x) + threadIdx.x;
 
     od[index] = value;
 
     // sync after each decomposition step
-    __syncthreads();
+    cg::sync(cta);
 }
 
 
@@ -104,6 +110,9 @@ dwtHaar1D(float *id, float *od, float *approx_final,
           const unsigned int slength_step_half,
           const int bdim)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
+
     // shared memory for part of the signal
     extern __shared__ float shared[];
 
@@ -120,14 +129,14 @@ dwtHaar1D(float *id, float *od, float *approx_final,
     // read data from global memory
     shared[tid] = id[idata];
     shared[tid + bdim] = id[idata + bdim];
-    __syncthreads();
+    cg::sync(cta);
 
     // this operation has a two way bank conflicts for all threads, this are two
     // additional cycles for each warp -- all alternatives to avoid this bank
     // conflict are more expensive than the one cycle introduced by serialization
     float data0 = shared[2*tid];
     float data1 = shared[(2*tid) + 1];
-    __syncthreads();
+    cg::sync(cta);
 
     // detail coefficient, not further referenced so directly store in
     // global memory
@@ -143,7 +152,7 @@ dwtHaar1D(float *id, float *od, float *approx_final,
 
     // all threads have to write approximation coefficient to shared memory before
     // next steps can take place
-    __syncthreads();
+    cg::sync(cta);
 
     // early out if possible
     // the compiler removes this part from the source because dlevels is
@@ -211,7 +220,7 @@ dwtHaar1D(float *id, float *od, float *approx_final,
             }
 
             // sync after each decomposition step
-            __syncthreads();
+            cg::sync(cta);
         }
 
         // write the top most level element for the next decomposition steps

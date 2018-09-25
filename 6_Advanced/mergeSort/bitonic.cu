@@ -9,6 +9,9 @@
  *
  */
 
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
 #include <helper_cuda.h>
 #include <assert.h>
 #include "mergeSort_common.h"
@@ -45,6 +48,8 @@ __global__ void bitonicSortSharedKernel(
     uint sortDir
 )
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     //Shared memory storage for one or more short vectors
     __shared__ uint s_key[SHARED_SIZE_LIMIT];
     __shared__ uint s_val[SHARED_SIZE_LIMIT];
@@ -66,7 +71,7 @@ __global__ void bitonicSortSharedKernel(
 
         for (uint stride = size / 2; stride > 0; stride >>= 1)
         {
-            __syncthreads();
+            cg::sync(cta);
             uint pos = 2 * threadIdx.x - (threadIdx.x & (stride - 1));
             Comparator(
                 s_key[pos +      0], s_val[pos +      0],
@@ -80,7 +85,7 @@ __global__ void bitonicSortSharedKernel(
     {
         for (uint stride = arrayLength / 2; stride > 0; stride >>= 1)
         {
-            __syncthreads();
+            cg::sync(cta);
             uint pos = 2 * threadIdx.x - (threadIdx.x & (stride - 1));
             Comparator(
                 s_key[pos +      0], s_val[pos +      0],
@@ -90,7 +95,7 @@ __global__ void bitonicSortSharedKernel(
         }
     }
 
-    __syncthreads();
+    cg::sync(cta);
     d_DstKey[                      0] = s_key[threadIdx.x +                       0];
     d_DstVal[                      0] = s_val[threadIdx.x +                       0];
     d_DstKey[(SHARED_SIZE_LIMIT / 2)] = s_key[threadIdx.x + (SHARED_SIZE_LIMIT / 2)];
@@ -200,6 +205,8 @@ template<uint sortDir> __global__ void bitonicMergeElementaryIntervalsKernel(
     uint N
 )
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     __shared__ uint s_key[2 * SAMPLE_STRIDE];
     __shared__ uint s_val[2 * SAMPLE_STRIDE];
     __shared__ uint s_inf[2 * SAMPLE_STRIDE];
@@ -236,7 +243,7 @@ template<uint sortDir> __global__ void bitonicMergeElementaryIntervalsKernel(
     s_inf[threadIdx.x + SAMPLE_STRIDE] = 1;
 
     //Load input data
-    __syncthreads();
+    cg::sync(cta);
 
     if (threadIdx.x < lenSrcA)
     {
@@ -256,7 +263,7 @@ template<uint sortDir> __global__ void bitonicMergeElementaryIntervalsKernel(
     //"Extended" bitonic merge
     for (uint stride = SAMPLE_STRIDE; stride > 0; stride >>= 1)
     {
-        __syncthreads();
+        cg::sync(cta);
         uint pos = 2 * threadIdx.x - (threadIdx.x & (stride - 1));
         ComparatorExtended<sortDir>(
             s_key[pos +      0], s_val[pos +      0], s_inf[pos +      0],
@@ -266,7 +273,7 @@ template<uint sortDir> __global__ void bitonicMergeElementaryIntervalsKernel(
     }
 
     //Store sorted data
-    __syncthreads();
+    cg::sync(cta);
     d_DstKey += startDst;
     d_DstVal += startDst;
 

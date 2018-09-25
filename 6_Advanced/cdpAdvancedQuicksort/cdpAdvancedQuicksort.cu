@@ -26,6 +26,10 @@
 ////////////////////////////////////////////////////////////////////////////////
 #include <thrust/random.h>
 #include <thrust/device_vector.h>
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
+
 #include <helper_cuda.h>
 #include <helper_string.h>
 #include "cdpQuicksort.h"
@@ -120,6 +124,8 @@ __global__ void qsort_warp(unsigned *indata,
                            unsigned int source_is_indata,
                            unsigned int depth)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     // Find my data offset, based on warp ID
     unsigned int thread_id = threadIdx.x + (blockIdx.x << QSORT_BLOCKSIZE_SHIFT);
     //unsigned int warp_id = threadIdx.x >> 5;   // Used for debug only
@@ -144,16 +150,17 @@ __global__ void qsort_warp(unsigned *indata,
     // If all are <= pivot then we adjust the comparison
     // because otherwise the sort will move nothing and
     // we'll iterate forever.
+    cg::coalesced_group active = cg::coalesced_threads();
     unsigned int greater = (data > pivot);
-    unsigned int gt_mask = __ballot(greater);
+    unsigned int gt_mask = active.ballot(greater);
 
     if (gt_mask == 0)
     {
         greater = (data >= pivot);
-        gt_mask = __ballot(greater);    // Must re-ballot for adjusted comparator
+        gt_mask = active.ballot(greater);    // Must re-ballot for adjusted comparator
     }
 
-    unsigned int lt_mask = __ballot(!greater);
+    unsigned int lt_mask = active.ballot(!greater);
     unsigned int gt_count = __popc(gt_mask);
     unsigned int lt_count = __popc(lt_mask);
 
@@ -169,10 +176,8 @@ __global__ void qsort_warp(unsigned *indata,
             gt_offset = len - (atomicAdd((unsigned int *) &atomicData->gt_offset, gt_count) + gt_count);
     }
 
-    lt_offset = __shfl((int)lt_offset, 0);   // Everyone pulls the offsets from lane 0
-    gt_offset = __shfl((int)gt_offset, 0);
-
-    __syncthreads();
+    lt_offset = active.shfl((int)lt_offset, 0);   // Everyone pulls the offsets from lane 0
+    gt_offset = active.shfl((int)gt_offset, 0);
 
     // Now compute my own personal offset within this. I need to know how many
     // threads with a lane ID less than mine are going to write to the same buffer

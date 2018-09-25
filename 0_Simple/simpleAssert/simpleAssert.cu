@@ -72,7 +72,6 @@ void runTest(int argc, char **argv)
     int Nblocks = 2;
     int Nthreads = 32;
     cudaError_t error ;
-    cudaDeviceProp deviceProp;
 
 #ifndef _WIN32
     utsname OS_System_Type;
@@ -94,16 +93,6 @@ void runTest(int argc, char **argv)
 
     // This will pick the best possible CUDA capable device
     devID = findCudaDevice(argc, (const char **)argv);
-
-    checkCudaErrors(cudaGetDeviceProperties(&deviceProp, devID));
-
-    if (deviceProp.major < 2)
-    {
-        printf("simpleAssert requires a GPU with compute capability "
-               "2.0 or later, exiting...\n");
-
-        exit(EXIT_SUCCESS);
-    }
 
     // Kernel configuration, where a one-dimensional
     // grid and one-dimensional blocks are configured.

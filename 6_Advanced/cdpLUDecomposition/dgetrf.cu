@@ -31,16 +31,20 @@
 */
 
 #include <stdio.h>
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
+
 #include <cublas_v2.h>
 #include "cdp_lu.h"
 
 extern __device__ void report_error(const char *strName, int info);
-extern __device__ __noinline__ void dgetf2(cublasHandle_t cb_handle, int m, int n, double *A, int lda, int *ipiv, int *info);
+extern __device__ __noinline__ void dgetf2(cublasHandle_t cb_handle, int m, int n, double *A, int lda, int *ipiv, int *info, cg::thread_block cta);
 extern __global__ void dlaswp(int n, double *A, int lda, int *ipiv, int k1, int k2);
 
 #define DGETRF_BLOCK_SIZE 32
 
-__device__ __noinline__ void dgetrf(cublasHandle_t cb_handle, cudaStream_t stream, int m, int n, double *A, int lda, int *ipiv, int *info)
+__device__ __noinline__ void dgetrf(cublasHandle_t cb_handle, cudaStream_t stream, int m, int n, double *A, int lda, int *ipiv, int *info, cg::thread_block cta)
 {
     cublasStatus_t status;
 
@@ -93,7 +97,7 @@ __device__ __noinline__ void dgetrf(cublasHandle_t cb_handle, cudaStream_t strea
     if (nb < 1 || nb > minDim)
     {
         // We're too small - fall through to just calling dgetf2.
-        dgetf2(cb_handle, m, n, A, lda, ipiv, info);
+        dgetf2(cb_handle, m, n, A, lda, ipiv, info, cta);
         return;
     }
 
@@ -106,14 +110,14 @@ __device__ __noinline__ void dgetrf(cublasHandle_t cb_handle, cudaStream_t strea
         if (threadIdx.x == 0)
         {
             // Factor diagonal and subdiagonal blocks and test for exact singularity.
-            dgetf2(cb_handle, m-j, jb, &A[j*lda + j], lda, &ipiv[j], &iinfo);
+            dgetf2(cb_handle, m-j, jb, &A[j*lda + j], lda, &ipiv[j], &iinfo, cta);
 
             // Adjust INFO and the pivot indices.
             if (*info == 0 && iinfo > 0)
                 s_info = iinfo + j;
         }
 
-        __syncthreads();
+        cg::sync(cta);
 
         // Make sure info is valid.
         *info = s_info;
@@ -122,7 +126,7 @@ __device__ __noinline__ void dgetrf(cublasHandle_t cb_handle, cudaStream_t strea
         for (int i = j+threadIdx.x, end = min(m, j+jb) ; i < end ; i += blockDim.x)
             ipiv[i] += j;
 
-        __syncthreads();
+        cg::sync(cta);
 
         // Apply interchanges to columns 1:J-1. JB rows.
         if (threadIdx.x == 0)
@@ -151,7 +155,7 @@ __device__ __noinline__ void dgetrf(cublasHandle_t cb_handle, cudaStream_t strea
             }
         }
 
-        __syncthreads();
+        cg::sync(cta);
 
         // Make sure info has the correct value.
         if (s_info)
@@ -181,7 +185,7 @@ __device__ __noinline__ void dgetrf(cublasHandle_t cb_handle, cudaStream_t strea
             }
         }
 
-        __syncthreads();
+        cg::sync(cta);
 
         // Make sure info has the correct value.
         if (s_info)
@@ -200,6 +204,8 @@ __device__ __noinline__ void dgetrf(cublasHandle_t cb_handle, cudaStream_t strea
 
 __global__ void dgetrf_cdpentry(Parameters *device_params)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     cublasHandle_t cb_handle = NULL;
 
     cudaStream_t stream;
@@ -221,7 +227,7 @@ __global__ void dgetrf_cdpentry(Parameters *device_params)
         cublasSetStream_v2(cb_handle, stream);
     }
 
-    __syncthreads();        // Compiler requires this to not tail-split the if()...
+    cg::sync(cta);        // Compiler requires this to not tail-split the if()...
 
     dgetrf(cb_handle,
            stream,
@@ -230,5 +236,5 @@ __global__ void dgetrf_cdpentry(Parameters *device_params)
            device_params->device_LU,
            device_params->lda,
            device_params->device_piv,
-           device_params->device_info);
+           device_params->device_info, cta);
 }

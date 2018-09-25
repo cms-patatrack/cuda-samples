@@ -12,83 +12,9 @@
 #ifndef MONTECARLO_REDUCTION_CUH
 #define MONTECARLO_REDUCTION_CUH
 
+#include <cooperative_groups.h>
 
-template<class T, unsigned int blockSize>
-__device__ void sumReduceSharedMem(volatile T *sum, volatile T *sum2, int tid)
-{
-    // do reduction in shared mem
-    if (blockSize >= 512)
-    {
-        if (tid < 256)
-        {
-            sum[tid] += sum[tid + 256];
-            sum2[tid] += sum2[tid + 256];
-        }
-
-        __syncthreads();
-    }
-
-    if (blockSize >= 256)
-    {
-        if (tid < 128)
-        {
-            sum[tid] += sum[tid + 128];
-            sum2[tid] += sum2[tid + 128];
-        }
-
-        __syncthreads();
-    }
-
-    if (blockSize >= 128)
-    {
-        if (tid <  64)
-        {
-            sum[tid] += sum[tid +  64];
-            sum2[tid] += sum2[tid +  64];
-        }
-
-        __syncthreads();
-    }
-
-    if (tid < 32)
-    {
-        if (blockSize >=  64)
-        {
-            sum[tid] += sum[tid + 32];
-            sum2[tid] += sum2[tid + 32];
-        }
-
-        if (blockSize >=  32)
-        {
-            sum[tid] += sum[tid + 16];
-            sum2[tid] += sum2[tid + 16];
-        }
-
-        if (blockSize >=  16)
-        {
-            sum[tid] += sum[tid +  8];
-            sum2[tid] += sum2[tid +  8];
-        }
-
-        if (blockSize >=   8)
-        {
-            sum[tid] += sum[tid +  4];
-            sum2[tid] += sum2[tid +  4];
-        }
-
-        if (blockSize >=   4)
-        {
-            sum[tid] += sum[tid +  2];
-            sum2[tid] += sum2[tid +  2];
-        }
-
-        if (blockSize >=   2)
-        {
-            sum[tid] += sum[tid +  1];
-            sum2[tid] += sum2[tid +  1];
-        }
-    }
-}
+namespace cg = cooperative_groups;
 
 ////////////////////////////////////////////////////////////////////////////////
 // This function calculates total sum for each of the two input arrays.
@@ -96,35 +22,46 @@ __device__ void sumReduceSharedMem(volatile T *sum, volatile T *sum2, int tid)
 // Unrolling provides a bit of a performance improvement for small
 // to medium path counts.
 ////////////////////////////////////////////////////////////////////////////////
-#define UNROLL_REDUCTION
 
 template<class T, int SUM_N, int blockSize>
-__device__ void sumReduce(T *sum, T *sum2)
+__device__ void sumReduce(T *sum, T *sum2, cg::thread_block &cta, cg::thread_block_tile<32> &tile32, __TOptionValue *d_CallValue)
 {
-#ifdef UNROLL_REDUCTION
+    const int VEC = 32;
+    const int tid = cta.thread_rank();
 
-    for (int pos = threadIdx.x; pos < SUM_N; pos += blockSize)
+    T beta  = sum[tid];
+    T beta2 = sum2[tid];
+    T temp, temp2;
+
+    for (int i = VEC/2; i > 0; i>>=1)
     {
-        __syncthreads();
-        sumReduceSharedMem<T, blockSize>(sum, sum2, pos);
-    }
-
-#else
-
-    for (int stride = SUM_N / 2; stride > 0; stride >>= 1)
-    {
-        __syncthreads();
-
-        for (int pos = threadIdx.x; pos < stride; pos += blockSize)
+        if (tile32.thread_rank() < i)
         {
-            sum[pos] += sum[pos + stride];
-            sum2[pos] += sum2[pos + stride];
+                temp      = sum[tid+i];
+                temp2     = sum2[tid+i];
+                beta     += temp;
+                beta2    += temp2;
+                sum[tid]  = beta;
+                sum2[tid] = beta2;
         }
+        cg::sync(tile32);
     }
+    cg::sync(cta);
 
-#endif
+    if (tid == 0)
+    {
+        beta  = 0;
+        beta2 = 0;
+        for (int i = 0; i < blockDim.x; i += VEC) 
+        {
+            beta  += sum[i];
+            beta2 += sum2[i];
+        }
+        __TOptionValue t  = {beta, beta2};
+        *d_CallValue = t;
+    }
+    cg::sync(cta);
 }
-
 
 
 #endif

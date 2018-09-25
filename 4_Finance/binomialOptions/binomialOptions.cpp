@@ -74,15 +74,7 @@ int main(int argc, char **argv)
 {
     printf("[%s] - Starting...\n", argv[0]);
 
-    cudaDeviceProp deviceProp;
     int devID = findCudaDevice(argc, (const char **)argv);
-    checkCudaErrors(cudaGetDeviceProperties(&deviceProp, devID));
-
-    if (((deviceProp.major << 4) + deviceProp.minor) < 0x20)
-    {
-        fprintf(stderr, "binomialOptions requires Compute Capability of SM 2.0 or higher to run.\n");
-        exit(EXIT_WAIVED);
-    }
 
     const int OPT_N = MAX_OPTIONS;
 

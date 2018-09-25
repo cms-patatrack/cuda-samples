@@ -19,6 +19,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
+
 #include <helper_cuda.h>
 #include <helper_math.h>
 
@@ -28,6 +32,9 @@
 // Transpose kernel (see transpose CUDA Sample for details)
 __global__ void d_transpose(uint *odata, uint *idata, int width, int height)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
+
     __shared__ uint block[BLOCK_DIM][BLOCK_DIM+1];
 
     // read the matrix tile into shared memory
@@ -40,7 +47,7 @@ __global__ void d_transpose(uint *odata, uint *idata, int width, int height)
         block[threadIdx.y][threadIdx.x] = idata[index_in];
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     // write the transposed matrix tile to global memory
     xIndex = blockIdx.y * BLOCK_DIM + threadIdx.x;

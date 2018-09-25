@@ -276,6 +276,9 @@ void runTestMultiKernel(ipcCUDA_t *s_mem, int index)
 
         checkCudaErrors(cudaEventDestroy(event));
     }
+
+    cudaDeviceReset();
+
 }
 #endif
 
@@ -387,11 +390,6 @@ int main(int argc, char **argv)
         }
 
         printf("\nShutting down...\n");
-
-        for (int i = 0; i < s_devices->count; i++)
-        {
-            checkCudaErrors(cudaSetDevice(s_devices->ordinals[i]));
-        }
 
         exit(EXIT_SUCCESS);
     }

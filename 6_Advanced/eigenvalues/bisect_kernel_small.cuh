@@ -14,6 +14,10 @@
 #ifndef _BISECT_KERNEL_SMALL_H_
 #define _BISECT_KERNEL_SMALL_H_
 
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
+
 // includes, project
 #include "config.h"
 #include "util.h"
@@ -44,6 +48,8 @@ bisectKernel(float *g_d, float *g_s, const unsigned int n,
              float epsilon
             )
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     // intervals (store left and right because the subdivision tree is in general
     // not dense
     __shared__  float  s_left[MAX_THREADS_BLOCK_SMALL_MATRIX];
@@ -93,7 +99,7 @@ bisectKernel(float *g_d, float *g_s, const unsigned int n,
     s_left_count[threadIdx.x] = 0;
     s_right_count[threadIdx.x] = 0;
 
-    __syncthreads();
+    cg::sync(cta);
 
     // set up initial configuration
     if (0 == threadIdx.x)
@@ -115,7 +121,7 @@ bisectKernel(float *g_d, float *g_s, const unsigned int n,
     {
 
         all_threads_converged = 1;
-        __syncthreads();
+        cg::sync(cta);
 
         is_active_second = 0;
         subdivideActiveInterval(threadIdx.x,
@@ -124,7 +130,7 @@ bisectKernel(float *g_d, float *g_s, const unsigned int n,
                                 left, right, left_count, right_count,
                                 mid, all_threads_converged);
 
-        __syncthreads();
+        cg::sync(cta);
 
         // check if done
         if (1 == all_threads_converged)
@@ -132,7 +138,7 @@ bisectKernel(float *g_d, float *g_s, const unsigned int n,
             break;
         }
 
-        __syncthreads();
+        cg::sync(cta);
 
         // compute number of eigenvalues smaller than mid
         // use all threads for reading the necessary matrix data from global
@@ -142,9 +148,9 @@ bisectKernel(float *g_d, float *g_s, const unsigned int n,
         mid_count = computeNumSmallerEigenvals(g_d, g_s, n, mid,
                                                threadIdx.x, num_threads_active,
                                                s_left, s_right,
-                                               (left == right));
+                                               (left == right), cta);
 
-        __syncthreads();
+        cg::sync(cta);
 
         // store intervals
         // for all threads store the first child interval in a continuous chunk of
@@ -184,7 +190,7 @@ bisectKernel(float *g_d, float *g_s, const unsigned int n,
         }
 
         // necessary so that compact_second_chunk is up-to-date
-        __syncthreads();
+        cg::sync(cta);
 
         // perform compaction of chunk where second children are stored
         // scan of (num_threads_active / 2) elements, thus at most
@@ -192,7 +198,7 @@ bisectKernel(float *g_d, float *g_s, const unsigned int n,
         if (compact_second_chunk > 0)
         {
 
-            createIndicesCompaction(s_compaction_list_exc, num_threads_compaction);
+            createIndicesCompaction(s_compaction_list_exc, num_threads_compaction, cta);
 
             compactIntervals(s_left, s_right, s_left_count, s_right_count,
                              mid, right, mid_count, right_count,
@@ -200,7 +206,7 @@ bisectKernel(float *g_d, float *g_s, const unsigned int n,
                              is_active_second);
         }
 
-        __syncthreads();
+        cg::sync(cta);
 
         if (0 == threadIdx.x)
         {
@@ -213,11 +219,11 @@ bisectKernel(float *g_d, float *g_s, const unsigned int n,
             compact_second_chunk = 0;
         }
 
-        __syncthreads();
+        cg::sync(cta);
 
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     // write resulting intervals to global mem
     // for all threads write if they have been converged to an eigenvalue to

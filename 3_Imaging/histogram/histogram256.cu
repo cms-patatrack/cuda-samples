@@ -13,6 +13,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
 #include <helper_cuda.h>
 #include "histogram_common.h"
 
@@ -36,6 +39,8 @@ inline __device__ void addWord(uint *s_WarpHist, uint data, uint tag)
 
 __global__ void histogram256Kernel(uint *d_PartialHistograms, uint *d_Data, uint dataCount)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     //Per-warp subhistogram storage
     __shared__ uint s_Hist[HISTOGRAM256_THREADBLOCK_MEMORY];
     uint *s_WarpHist= s_Hist + (threadIdx.x >> LOG2_WARP_SIZE) * HISTOGRAM256_BIN_COUNT;
@@ -51,7 +56,7 @@ __global__ void histogram256Kernel(uint *d_PartialHistograms, uint *d_Data, uint
     //Cycle through the entire data set, update subhistograms for each warp
     const uint tag = threadIdx.x << (UINT_BITS - LOG2_WARP_SIZE);
 
-    __syncthreads();
+    cg::sync(cta);
 
     for (uint pos = UMAD(blockIdx.x, blockDim.x, threadIdx.x); pos < dataCount; pos += UMUL(blockDim.x, gridDim.x))
     {
@@ -60,7 +65,7 @@ __global__ void histogram256Kernel(uint *d_PartialHistograms, uint *d_Data, uint
     }
 
     //Merge per-warp histograms into per-block and write to global memory
-    __syncthreads();
+    cg::sync(cta);
 
     for (uint bin = threadIdx.x; bin < HISTOGRAM256_BIN_COUNT; bin += HISTOGRAM256_THREADBLOCK_SIZE)
     {
@@ -89,6 +94,9 @@ __global__ void mergeHistogram256Kernel(
     uint histogramCount
 )
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
+
     uint sum = 0;
 
     for (uint i = threadIdx.x; i < histogramCount; i += MERGE_THREADBLOCK_SIZE)
@@ -101,7 +109,7 @@ __global__ void mergeHistogram256Kernel(
 
     for (uint stride = MERGE_THREADBLOCK_SIZE / 2; stride > 0; stride >>= 1)
     {
-        __syncthreads();
+        cg::sync(cta);
 
         if (threadIdx.x < stride)
         {

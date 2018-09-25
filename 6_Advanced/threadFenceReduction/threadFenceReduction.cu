@@ -374,9 +374,9 @@ runTest(int argc, char **argv)
     bool multipass = false;
     bool bTestResult = false;
 
-    if (checkCmdLineFlag(argc, (const char **) argv, "b"))
+    if (checkCmdLineFlag(argc, (const char **) argv, "n"))
     {
-        size       = getCmdLineArgumentInt(argc, (const char **)argv, "b");
+        size       = getCmdLineArgumentInt(argc, (const char **)argv, "n");
     }
 
     if (checkCmdLineFlag(argc, (const char **) argv, "threads"))

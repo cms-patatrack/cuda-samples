@@ -12,6 +12,7 @@
     <path>../../common/inc</path>
   </includepaths>
   <keyconcepts>
+    <concept level="basic">Cooperative Groups</concept>
     <concept level="advanced">CUDA Dynamic Parallelism</concept>
   </keyconcepts>
   <keywords>
@@ -35,6 +36,7 @@
   <sm-arch>sm50</sm-arch>
   <sm-arch>sm52</sm-arch>
   <sm-arch>sm60</sm-arch>
+  <sm-arch>sm70</sm-arch>
   <supported_envs>
     <env>
       <arch>x86_64</arch>

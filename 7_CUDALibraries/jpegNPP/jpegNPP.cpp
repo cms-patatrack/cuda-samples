@@ -304,7 +304,7 @@ void readHuffmanTables(const unsigned char *pData, HuffmanTable *pTables)
         memcpy(pTables[nIdx].aTable, pData, nCodeCount);
         pData += nCodeCount;
 
-        nLength -= 17 + nCodeCount;
+        nLength -= (17 + nCodeCount);
     }
 }
 
@@ -586,7 +586,8 @@ int main(int argc, char **argv)
             }
 
             NPP_CHECK_NPP(nppiDecodeHuffmanScanHost_JPEG_8u16s_P3R(pJpegData + nPos, nAfterNextMarkerPos - nPos - 2,
-                                                                   nRestartInterval, oScanHeader.nSs, oScanHeader.nSe, oScanHeader.nA >> 4, oScanHeader.nA & 0x0f,
+                                                                   nRestartInterval, oScanHeader.nSs, oScanHeader.nSe, 
+                                                                   oScanHeader.nA >> 4, oScanHeader.nA & 0x0f,
                                                                    aphDCT,  aDCTStep,
                                                                    apHuffmanDCTable,
                                                                    apHuffmanACTable,
@@ -602,11 +603,33 @@ int main(int argc, char **argv)
         nMarker = nextMarker(pJpegData, nPos, nInputLength);
     }
 
-    // Copy DCT coefficients and Quantization Tables from host to device
+    // Copy DCT coefficients and Quantization Tables from host to device 
+    Npp8u aZigzag[] = {
+            0,  1,  5,  6, 14, 15, 27, 28,
+            2,  4,  7, 13, 16, 26, 29, 42,
+            3,  8, 12, 17, 25, 30, 41, 43,
+            9, 11, 18, 24, 31, 40, 44, 53,
+            10, 19, 23, 32, 39, 45, 52, 54,
+            20, 22, 33, 38, 46, 51, 55, 60,
+            21, 34, 37, 47, 50, 56, 59, 61,
+            35, 36, 48, 49, 57, 58, 62, 63
+    };
+
     for (int i = 0; i < 4; ++i)
     {
-        NPP_CHECK_CUDA(cudaMemcpyAsync(pdQuantizationTables + i * 64, aQuantizationTables[i].aTable, 64, cudaMemcpyHostToDevice));
+        Npp8u temp[64];
+
+        for( int k = 0 ; k < 32 ; ++k )
+        {
+            temp[2 * k + 0] = aQuantizationTables[i].aTable[aZigzag[k +  0]];
+            temp[2 * k + 1] = aQuantizationTables[i].aTable[aZigzag[k + 32]];
+        }
+
+        NPP_CHECK_CUDA(cudaMemcpyAsync((unsigned char *)pdQuantizationTables + i * 64, temp, 64, cudaMemcpyHostToDevice));
+
+           
     }
+        
 
     for (int i = 0; i < 3; ++i)
     {
@@ -663,31 +686,27 @@ int main(int argc, char **argv)
     }
 
     // Scale to target image size
+    // Assume we only deal with 420 images.
+    int aSampleFactor[3] = {1, 2, 2};
     for (int i = 0; i < 3; ++i)
     {
-        NppiSize oBlocksPerMCU = { oFrameHeader.aSamplingFactors[i] & 0x0f, oFrameHeader.aSamplingFactors[i] >> 4};
-
+        NppiSize oBlocksPerMCU = { oFrameHeader.aSamplingFactors[i] >> 4, oFrameHeader.aSamplingFactors[i] & 0x0f};
         NppiSize oSrcImageSize = {(oFrameHeader.nWidth * oBlocksPerMCU.width) / nMCUBlocksH, (oFrameHeader.nHeight * oBlocksPerMCU.height)/nMCUBlocksV};
         NppiRect oSrcImageROI = {0,0,oSrcImageSize.width, oSrcImageSize.height};
         NppiRect oDstImageROI;
-
+        oDstImageROI.x = 0;
+        oDstImageROI.y = 0;
+        oDstImageROI.width = oDstImageSize.width / aSampleFactor[i];
+        oDstImageROI.height = oDstImageSize.height / aSampleFactor[i];
+        
         NppiInterpolationMode eInterploationMode = NPPI_INTER_SUPER;
-
+        
         if (nScaleFactor >= 1.f)
             eInterploationMode = NPPI_INTER_LANCZOS;
-
-        NPP_CHECK_NPP(nppiGetResizeRect(oSrcImageROI, &oDstImageROI,
-                                        nScaleFactor,
-                                        nScaleFactor,
-                                        0.5, 0.5, eInterploationMode));
-
-        NPP_CHECK_NPP(nppiResizeSqrPixel_8u_C1R(apSrcImage[i], oSrcImageSize, aSrcImageStep[i], oSrcImageROI,
-                                                apDstImage[i], aDstImageStep[i], oDstImageROI ,
-                                                nScaleFactor,
-                                                nScaleFactor,
-                                                0.5, 0.5, eInterploationMode));
+        
+        NPP_CHECK_NPP(nppiResize_8u_C1R(apSrcImage[i], aSrcImageStep[i], oSrcImageSize, oSrcImageROI,
+                                        apDstImage[i], aDstImageStep[i], oDstImageSize, oDstImageROI, eInterploationMode));
     }
-
 
     /***************************
     *
@@ -709,11 +728,13 @@ int main(int argc, char **argv)
 
     // Huffman Encoding
     Npp8u *pdScan;
-    Npp32s nScanLength;
-    NPP_CHECK_CUDA(cudaMalloc(&pdScan, 4 << 20));
+    Npp32s nScanSize;
+    nScanSize = oDstImageSize.width * oDstImageSize.height * 2;
+    nScanSize = nScanSize > (4 << 20) ? nScanSize : (4 << 20);    
+    NPP_CHECK_CUDA(cudaMalloc(&pdScan, nScanSize));
 
     Npp8u *pJpegEncoderTemp;
-    Npp32s nTempSize;
+    size_t nTempSize;
     NPP_CHECK_NPP(nppiEncodeHuffmanGetSize(aSrcSize[0], 3, &nTempSize));
     NPP_CHECK_CUDA(cudaMalloc(&pJpegEncoderTemp, nTempSize));
 
@@ -725,10 +746,24 @@ int main(int argc, char **argv)
         nppiEncodeHuffmanSpecInitAlloc_JPEG(pHuffmanDCTables[(oScanHeader.aHuffmanTablesSelector[i] >> 4)].aCodes, nppiDCTable, &apHuffmanDCTable[i]);
         nppiEncodeHuffmanSpecInitAlloc_JPEG(pHuffmanACTables[(oScanHeader.aHuffmanTablesSelector[i] & 0x0f)].aCodes, nppiACTable, &apHuffmanACTable[i]);
     }
-
-    NPP_CHECK_NPP(nppiEncodeHuffmanScan_JPEG_8u16s_P3R(apdDCT, aDCTStep,
+    
+    Npp8u * hpCodesDC[3];
+    Npp8u * hpCodesAC[3];
+    Npp8u * hpTableDC[3];
+    Npp8u * hpTableAC[3];
+    for(int iComponent = 0; iComponent < 2; ++ iComponent)
+    {
+        hpCodesDC[iComponent] = pHuffmanDCTables[iComponent].aCodes;
+        hpCodesAC[iComponent] = pHuffmanACTables[iComponent].aCodes;
+        hpTableDC[iComponent] = pHuffmanDCTables[iComponent].aTable;
+        hpTableAC[iComponent] = pHuffmanACTables[iComponent].aTable;
+    }
+    
+    Npp32s nScanLength;                
+    NPP_CHECK_NPP(nppiEncodeOptimizeHuffmanScan_JPEG_8u16s_P3R(apdDCT, aDCTStep,
                                                        0, oScanHeader.nSs, oScanHeader.nSe, oScanHeader.nA >> 4, oScanHeader.nA & 0x0f,
                                                        pdScan, &nScanLength,
+                                                       hpCodesDC, hpTableDC, hpCodesAC, hpTableAC,
                                                        apHuffmanDCTable,
                                                        apHuffmanACTable,
                                                        aDstSize,
@@ -741,7 +776,7 @@ int main(int argc, char **argv)
     }
 
     // Write JPEG
-    unsigned char *pDstJpeg = new unsigned char[4 << 20];
+    unsigned char *pDstJpeg = new unsigned char[nScanSize];
     unsigned char *pDstOutput = pDstJpeg;
 
     oFrameHeader.nWidth = oDstImageSize.width;

@@ -15,6 +15,9 @@
 
 
 #include "common.h"
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
 
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief one iteration of classical Horn-Schunck method, CUDA kernel.
@@ -45,6 +48,9 @@ void JacobiIteration(const float *du0,
                      float *du1,
                      float *dv1)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
+
     volatile __shared__ float du[(bx + 2) * (by + 2)];
     volatile __shared__ float dv[(bx + 2) * (by + 2)];
 
@@ -125,7 +131,7 @@ void JacobiIteration(const float *du0,
         }
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     if (ix >= w || iy >= h) return;
 

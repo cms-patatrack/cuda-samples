@@ -14,11 +14,12 @@
 ////////////////////////////////////////////////////////////////////////////////
 #include <stdlib.h>
 #include <stdio.h>
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
 #include <helper_cuda.h>
 #include <curand_kernel.h>
 #include "MonteCarlo_common.h"
-
-
 
 ////////////////////////////////////////////////////////////////////////////////
 // Helper reduction template
@@ -69,6 +70,10 @@ static __global__ void MonteCarloOneBlockPerOption(
     int pathN,
     int optionN)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
+    cg::thread_block_tile<32> tile32 = cg::tiled_partition<32>(cta);
+
     const int SUM_N = THREAD_N;
     __shared__ real s_SumCall[SUM_N];
     __shared__ real s_Sum2Call[SUM_N];
@@ -107,13 +112,8 @@ static __global__ void MonteCarloOneBlockPerOption(
 
         //Reduce shared memory accumulators
         //and write final result to global memory
-        sumReduce<real, SUM_N, THREAD_N>(s_SumCall, s_Sum2Call);
-
-        if (threadIdx.x == 0)
-        {
-            __TOptionValue t = {s_SumCall[0], s_Sum2Call[0]};
-            d_CallValue[optionIndex] = t;
-        }
+        cg::sync(cta);
+        sumReduce<real, SUM_N, THREAD_N>(s_SumCall, s_Sum2Call, cta, tile32, &d_CallValue[optionIndex]);
     }
 }
 
@@ -144,6 +144,7 @@ extern "C" void initMonteCarloGPU(TOptionPlan *plan)
     //Allocate states for pseudo random number generators
     checkCudaErrors(cudaMalloc((void **) &plan->rngStates,
                                plan->gridSize * THREAD_N * sizeof(curandState)));
+    checkCudaErrors(cudaMemset(plan->rngStates, 0, plan->gridSize * THREAD_N * sizeof(curandState)));
 
     // place each device pathN random numbers apart on the random number sequence
     rngSetupStates<<<plan->gridSize, THREAD_N>>>(plan->rngStates, plan->device);

@@ -11,6 +11,9 @@
 
 
 #include <assert.h>
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
 #include <helper_cuda.h>
 #include "scan_common.h"
 
@@ -25,7 +28,7 @@
 //Allocate 2 * 'size' local memory, initialize the first half
 //with 'size' zeros avoiding if(pos >= offset) condition evaluation
 //and saving instructions
-inline __device__ uint scan1Inclusive(uint idata, volatile uint *s_Data, uint size)
+inline __device__ uint scan1Inclusive(uint idata, volatile uint *s_Data, uint size, cg::thread_block cta)
 {
     uint pos = 2 * threadIdx.x - (threadIdx.x & (size - 1));
     s_Data[pos] = 0;
@@ -34,22 +37,22 @@ inline __device__ uint scan1Inclusive(uint idata, volatile uint *s_Data, uint si
 
     for (uint offset = 1; offset < size; offset <<= 1)
     {
-        __syncthreads();
+        cg::sync(cta);
         uint t = s_Data[pos] + s_Data[pos - offset];
-        __syncthreads();
+        cg::sync(cta);
         s_Data[pos] = t;
     }
 
     return s_Data[pos];
 }
 
-inline __device__ uint scan1Exclusive(uint idata, volatile uint *s_Data, uint size)
+inline __device__ uint scan1Exclusive(uint idata, volatile uint *s_Data, uint size, cg::thread_block cta)
 {
-    return scan1Inclusive(idata, s_Data, size) - idata;
+    return scan1Inclusive(idata, s_Data, size, cta) - idata;
 }
 
 
-inline __device__ uint4 scan4Inclusive(uint4 idata4, volatile uint *s_Data, uint size)
+inline __device__ uint4 scan4Inclusive(uint4 idata4, volatile uint *s_Data, uint size, cg::thread_block cta)
 {
     //Level-0 inclusive scan
     idata4.y += idata4.x;
@@ -57,7 +60,7 @@ inline __device__ uint4 scan4Inclusive(uint4 idata4, volatile uint *s_Data, uint
     idata4.w += idata4.z;
 
     //Level-1 exclusive scan
-    uint oval = scan1Exclusive(idata4.w, s_Data, size / 4);
+    uint oval = scan1Exclusive(idata4.w, s_Data, size / 4, cta);
 
     idata4.x += oval;
     idata4.y += oval;
@@ -69,9 +72,9 @@ inline __device__ uint4 scan4Inclusive(uint4 idata4, volatile uint *s_Data, uint
 
 //Exclusive vector scan: the array to be scanned is stored
 //in local thread memory scope as uint4
-inline __device__ uint4 scan4Exclusive(uint4 idata4, volatile uint *s_Data, uint size)
+inline __device__ uint4 scan4Exclusive(uint4 idata4, volatile uint *s_Data, uint size, cg::thread_block cta)
 {
-    uint4 odata4 = scan4Inclusive(idata4, s_Data, size);
+    uint4 odata4 = scan4Inclusive(idata4, s_Data, size, cta);
     odata4.x -= idata4.x;
     odata4.y -= idata4.y;
     odata4.z -= idata4.z;
@@ -88,6 +91,8 @@ __global__ void scanExclusiveShared(
     uint size
 )
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     __shared__ uint s_Data[2 * THREADBLOCK_SIZE];
 
     uint pos = blockIdx.x * blockDim.x + threadIdx.x;
@@ -96,7 +101,7 @@ __global__ void scanExclusiveShared(
     uint4 idata4 = d_Src[pos];
 
     //Calculate exclusive scan
-    uint4 odata4 = scan4Exclusive(idata4, s_Data, size);
+    uint4 odata4 = scan4Exclusive(idata4, s_Data, size, cta);
 
     //Write back
     d_Dst[pos] = odata4;
@@ -111,6 +116,8 @@ __global__ void scanExclusiveShared2(
     uint arrayLength
 )
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     __shared__ uint s_Data[2 * THREADBLOCK_SIZE];
 
     //Skip loads and stores for inactive threads of last threadblock (pos >= N)
@@ -126,7 +133,7 @@ __global__ void scanExclusiveShared2(
             d_Src[(4 * THREADBLOCK_SIZE) - 1 + (4 * THREADBLOCK_SIZE) * pos];
 
     //Compute
-    uint odata = scan1Exclusive(idata, s_Data, arrayLength);
+    uint odata = scan1Exclusive(idata, s_Data, arrayLength, cta);
 
     //Avoid out-of-bound access
     if (pos < N)
@@ -141,6 +148,8 @@ __global__ void uniformUpdate(
     uint *d_Buffer
 )
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     __shared__ uint buf;
     uint pos = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -149,7 +158,7 @@ __global__ void uniformUpdate(
         buf = d_Buffer[blockIdx.x];
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     uint4 data4 = d_Data[pos];
     data4.x += buf;

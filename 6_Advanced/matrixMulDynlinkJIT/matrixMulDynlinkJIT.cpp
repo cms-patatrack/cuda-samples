@@ -144,8 +144,7 @@ CUresult initCUDA(int argc, char **argv, CUfunction *pMatrixMul, int *block_size
     checkCudaErrors(cuDeviceGetName(deviceName, 256, cuDevice));
     printf("> Device %d: \"%s\" with Compute %d.%d capability\n", cuDevice, deviceName, major, minor);
 
-    // use a larger block size for Fermi and above
-    block_size = (major < 2) ? 16 : 32;
+    block_size = 32;
     *block_size_out = block_size;
 
     // create context for picked device

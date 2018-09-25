@@ -36,8 +36,6 @@
 #include "FunctionPointers_kernels.h"
 
 #define EXIT_WAIVED 2
-#define MIN_RUNTIME_VERSION 3010
-#define MIN_COMPUTE_VERSION 0x20
 
 //
 // Cuda example code that implements the Sobel edge detection
@@ -375,107 +373,10 @@ void initGL(int *argc, char **argv)
     }
 }
 
-bool checkCUDAProfile(int dev, int min_runtime, int min_compute)
-{
-    int runtimeVersion = 0;
-
-    cudaDeviceProp deviceProp;
-    cudaGetDeviceProperties(&deviceProp, dev);
-
-    fprintf(stderr,"\nDevice %d: \"%s\"\n", dev, deviceProp.name);
-    cudaRuntimeGetVersion(&runtimeVersion);
-    fprintf(stderr,"  CUDA Runtime Version     :\t%d.%d\n", runtimeVersion/1000, (runtimeVersion%100)/10);
-    fprintf(stderr,"  CUDA Compute Capability  :\t%d.%d\n", deviceProp.major, deviceProp.minor);
-
-    if (runtimeVersion >= min_runtime && ((deviceProp.major<<4) + deviceProp.minor) >= min_compute)
-    {
-        return true;
-    }
-    else
-    {
-        return false;
-    }
-}
-
-int findCapableDevice(int argc, char **argv)
-{
-    int dev;
-    int bestDev = -1;
-
-    int deviceCount = 0;
-    cudaError_t error_id = cudaGetDeviceCount(&deviceCount);
-
-    if (error_id != cudaSuccess)
-    {
-        printf("cudaGetDeviceCount returned %d\n-> %s\n", (int)error_id, cudaGetErrorString(error_id));
-        exit(EXIT_FAILURE);
-    }
-
-    if (deviceCount == 0)
-    {
-        fprintf(stderr,"There is no device supporting CUDA.\n");
-    }
-    else
-    {
-        fprintf(stderr,"Found %d CUDA Capable Device(s).\n", deviceCount);
-    }
-
-    for (dev = 0; dev < deviceCount; ++dev)
-    {
-        cudaDeviceProp deviceProp;
-        cudaGetDeviceProperties(&deviceProp, dev);
-
-        if (checkCUDAProfile(dev, MIN_RUNTIME_VERSION, MIN_COMPUTE_VERSION))
-        {
-            fprintf(stderr,"\nFound CUDA Capable Device %d: \"%s\"\n", dev, deviceProp.name);
-
-            if (bestDev == -1)
-            {
-                bestDev = dev;
-                fprintf(stderr, "Setting active device to %d\n", bestDev);
-            }
-        }
-    }
-
-    if (bestDev == -1)
-    {
-        fprintf(stderr, "\nNo configuration with available capabilities was found.  Test has been waived.\n");
-        fprintf(stderr, "This CUDA Sample has minimum requirements:\n");
-        fprintf(stderr, "\tCUDA Compute Capability >= %d.%d is required\n", MIN_COMPUTE_VERSION/16, MIN_COMPUTE_VERSION%16);
-        fprintf(stderr, "\tCUDA Runtime Version    >= %d.%d is required\n", MIN_RUNTIME_VERSION/1000, (MIN_RUNTIME_VERSION%100)/10);
-    }
-
-    return bestDev;
-}
-
-void checkDeviceMeetComputeSpec(int argc, char **argv)
-{
-    int device = 0;
-    cudaGetDevice(&device);
-
-    if (checkCUDAProfile(device, MIN_RUNTIME_VERSION, MIN_COMPUTE_VERSION))
-    {
-        fprintf(stderr,"\nCUDA Capable Device %d, meets minimum required specs.\n", device);
-    }
-    else
-    {
-        fprintf(stderr, "\nNo configuration with minimum compute capabilities found.  Exiting...\n");
-        fprintf(stderr, "This sample requires:\n");
-        fprintf(stderr, "\tCUDA Compute Capability >= %d.%d is required\n", MIN_COMPUTE_VERSION/16, MIN_COMPUTE_VERSION%16);
-        fprintf(stderr, "\tCUDA Runtime Version    >= %d.%d is required\n", MIN_RUNTIME_VERSION/1000, (MIN_RUNTIME_VERSION%100)/10);
-
-        exit(EXIT_WAIVED);
-    }
-}
-
-
 void runAutoTest(int argc, char *argv[])
 {
     printf("[%s] (automated testing w/ readback)\n", sSDKsample);
     int devID = findCudaDevice(argc, (const char **)argv);
-
-    // Ensure that SM 2.0 or higher device is available before running
-    checkDeviceMeetComputeSpec(argc, argv);
 
     loadDefaultImage(argv[0]);
 
@@ -583,9 +484,7 @@ int main(int argc, char **argv)
         // This is necessary in order to achieve optimal performance with OpenGL/CUDA interop.
         initGL(&argc, argv);
 
-        int dev = findCapableDevice(argc, argv);
-
-        checkDeviceMeetComputeSpec(argc, argv);
+        int dev = findCudaDevice(argc, (const char **)argv);
 
         if (dev != -1)
         {

@@ -46,8 +46,6 @@
     T( PFNEGLGETSTREAMFILEDESCRIPTORKHRPROC, eglGetStreamFileDescriptorKHR) \
     T( PFNEGLCREATESTREAMFROMFILEDESCRIPTORKHRPROC, eglCreateStreamFromFileDescriptorKHR)
 
-// See bug 200161837 on my EGL pointer functions should renamed starting with my_
-// not renaming egl pointer function to start with my_ causes 64 bit app to crash
 #define eglCreateStreamKHR                                      my_eglCreateStreamKHR 
 #define eglDestroyStreamKHR                                     my_eglDestroyStreamKHR 
 #define eglQueryStreamKHR                                       my_eglQueryStreamKHR 

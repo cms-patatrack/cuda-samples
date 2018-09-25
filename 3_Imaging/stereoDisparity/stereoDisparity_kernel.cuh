@@ -23,6 +23,10 @@
 // (see convolution CUDA Sample for example)
 #define STEPS 3
 
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
+
 texture<unsigned int, cudaTextureType2D, cudaReadModeElementType> tex2Dleft;
 texture<unsigned int, cudaTextureType2D, cudaReadModeElementType> tex2Dright;
 
@@ -41,14 +45,10 @@ texture<unsigned int, cudaTextureType2D, cudaReadModeElementType> tex2Dright;
 __device__ unsigned int __usad4(unsigned int A, unsigned int B, unsigned int C=0)
 {
     unsigned int result;
-#if (__CUDA_ARCH__ >= 300) // Kepler (SM 3.x) supports a 4 vector SAD SIMD
+
+    // Kepler (SM 3.x) and higher supports a 4 vector SAD SIMD
     asm("vabsdiff4.u32.u32.u32.add" " %0, %1, %2, %3;": "=r"(result):"r"(A), "r"(B), "r"(C));
-#else // SM 2.0            // Fermi  (SM 2.x) supports only 1 SAD SIMD, so there are 4 instructions
-    asm("vabsdiff.u32.u32.u32.add" " %0, %1.b0, %2.b0, %3;": "=r"(result):"r"(A), "r"(B), "r"(C));
-    asm("vabsdiff.u32.u32.u32.add" " %0, %1.b1, %2.b1, %3;": "=r"(result):"r"(A), "r"(B), "r"(result));
-    asm("vabsdiff.u32.u32.u32.add" " %0, %1.b2, %2.b2, %3;": "=r"(result):"r"(A), "r"(B), "r"(result));
-    asm("vabsdiff.u32.u32.u32.add" " %0, %1.b3, %2.b3, %3;": "=r"(result):"r"(A), "r"(B), "r"(result));
-#endif
+
     return result;
 }
 
@@ -75,6 +75,8 @@ stereoDisparityKernel(unsigned int *g_img0, unsigned int *g_img1,
                       int w, int h,
                       int minDisparity, int maxDisparity)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     // access thread id
     const int tidx = blockDim.x * blockIdx.x + threadIdx.x;
     const int tidy = blockDim.y * blockIdx.y + threadIdx.y;
@@ -112,7 +114,7 @@ stereoDisparityKernel(unsigned int *g_img0, unsigned int *g_img1,
             imRight = tex2D(tex2Dright, tidx-RAD+d, tidy+offset);
             cost = __usad4(imLeft, imRight);
             diff[sidy+offset][sidx-RAD] = cost;
-        }
+        }   
 
         //RIGHT
 #pragma unroll
@@ -131,7 +133,7 @@ stereoDisparityKernel(unsigned int *g_img0, unsigned int *g_img1,
             }
         }
 
-        __syncthreads();
+        cg::sync(cta);
 
         // sum cost horizontally
 #pragma unroll
@@ -147,10 +149,9 @@ stereoDisparityKernel(unsigned int *g_img0, unsigned int *g_img1,
                 cost += diff[sidy+offset][sidx+i];
             }
 
-            __syncthreads();
+            cg::sync(cta);
             diff[sidy+offset][sidx] = cost;
-            __syncthreads();
-
+            cg::sync(cta);
         }
 
         // sum cost vertically
@@ -169,7 +170,7 @@ stereoDisparityKernel(unsigned int *g_img0, unsigned int *g_img1,
             bestDisparity = d+8;
         }
 
-        __syncthreads();
+        cg::sync(cta);
 
     }
 

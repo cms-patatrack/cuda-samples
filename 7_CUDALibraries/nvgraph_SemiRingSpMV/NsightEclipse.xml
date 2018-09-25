@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?> 
 <!DOCTYPE entry SYSTEM "SamplesInfo.dtd">
 <entry>
-  <name>nvgraph_SemiRingSpmv</name>
+  <name>nvgraph_SemiRingSpMV</name>
   <description><![CDATA[A CUDA Sample that demonstrates Semi-Ring SpMV using NVGRAPH Library.]]></description>
   <devicecompilation>whole</devicecompilation>
   <includepaths>
@@ -23,7 +23,7 @@
   <librarypaths>
   </librarypaths>
   <nsight_eclipse>true</nsight_eclipse>
-  <primary_file>nvgraph_SemiRingSpmv.cpp</primary_file>
+  <primary_file>nvgraph_SemiRingSpMV.cpp</primary_file>
   <required_dependencies>
     <dependency>NVGRAPH</dependency>
   </required_dependencies>
@@ -37,6 +37,7 @@
   <sm-arch>sm50</sm-arch>
   <sm-arch>sm52</sm-arch>
   <sm-arch>sm60</sm-arch>
+  <sm-arch>sm70</sm-arch>
   <supported_envs>
     <env>
       <arch>x86_64</arch>

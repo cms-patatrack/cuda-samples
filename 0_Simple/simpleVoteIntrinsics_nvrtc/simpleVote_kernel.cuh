@@ -25,7 +25,8 @@ extern "C" __global__ void VoteAnyKernel1(unsigned int *input, unsigned int *res
 {
     int tx = threadIdx.x;
 
-    result[tx] = any(input[tx]);
+    int mask = 0xffffffff;
+    result[tx] = __any_sync(mask, input[tx]);
 }
 
 
@@ -36,7 +37,8 @@ extern "C" __global__ void VoteAllKernel2(unsigned int *input, unsigned int *res
 {
     int tx = threadIdx.x;
 
-    result[tx] = all(input[tx]);
+    int mask = 0xffffffff;
+    result[tx] = __all_sync(mask, input[tx]);
 }
 
 
@@ -45,10 +47,11 @@ extern "C" __global__ void VoteAllKernel2(unsigned int *input, unsigned int *res
 extern "C" __global__ void VoteAnyKernel3(bool *info, int warp_size)
 {
     int tx = threadIdx.x;
+    unsigned int mask = 0xffffffff;
     bool *offs = info + (tx * 3);
 
     // The following should hold true for the second and third warp
-    *offs = any((tx >= (warp_size * 3) / 2));
+    *offs = __any_sync(mask, (tx >= (warp_size * 3) / 2));
 
     // The following should hold true for the "upper half" of the second warp,
     // and all of the third warp

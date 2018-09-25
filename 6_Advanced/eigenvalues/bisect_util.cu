@@ -14,6 +14,10 @@
 #ifndef _BISECT_UTIL_H_
 #define _BISECT_UTIL_H_
 
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
+
 // includes, project
 #include "config.h"
 #include "util.h"
@@ -159,14 +163,15 @@ computeNumSmallerEigenvals(float *g_d, float *g_s, const unsigned int n,
                            const unsigned int tid,
                            const unsigned int num_intervals_active,
                            float *s_d, float *s_s,
-                           unsigned int converged
+                           unsigned int converged,
+                           cg::thread_block cta
                           )
 {
 
     float  delta = 1.0f;
     unsigned int count = 0;
 
-    __syncthreads();
+    cg::sync(cta);
 
     // read data into shared memory
     if (threadIdx.x < n)
@@ -175,7 +180,7 @@ computeNumSmallerEigenvals(float *g_d, float *g_s, const unsigned int n,
         s_s[threadIdx.x] = *(g_s + threadIdx.x - 1);
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     // perform loop only for active threads
     if ((tid < num_intervals_active) && (0 == converged))
@@ -219,7 +224,8 @@ computeNumSmallerEigenvalsLarge(float *g_d, float *g_s, const unsigned int n,
                                 const unsigned int tid,
                                 const unsigned int num_intervals_active,
                                 float *s_d, float *s_s,
-                                unsigned int converged
+                                unsigned int converged,
+                                cg::thread_block cta
                                )
 {
     float  delta = 1.0f;
@@ -231,7 +237,7 @@ computeNumSmallerEigenvalsLarge(float *g_d, float *g_s, const unsigned int n,
     for (unsigned int i = 0; i < n; i += blockDim.x)
     {
 
-        __syncthreads();
+        cg::sync(cta);
 
         // read new chunk of data into shared memory
         if ((i + threadIdx.x) < n)
@@ -241,7 +247,7 @@ computeNumSmallerEigenvalsLarge(float *g_d, float *g_s, const unsigned int n,
             s_s[threadIdx.x] = *(g_s + i + threadIdx.x - 1);
         }
 
-        __syncthreads();
+        cg::sync(cta);
 
 
         if (tid < num_intervals_active)
@@ -317,7 +323,7 @@ storeNonEmptyIntervals(unsigned int addr,
         // stream compaction of second chunk
         is_active_second = 1;
         s_compaction_list_exc[threadIdx.x] = 1;
-        compact_second_chunk = 1;
+        atomicExch(&compact_second_chunk, 1);
     }
     else
     {
@@ -356,7 +362,7 @@ template<class T>
 __device__
 void
 createIndicesCompaction(T *s_compaction_list_exc,
-                        unsigned int num_threads_compaction)
+                        unsigned int num_threads_compaction, cg::thread_block cta)
 {
 
     unsigned int offset = 1;
@@ -366,7 +372,7 @@ createIndicesCompaction(T *s_compaction_list_exc,
     for (int d = (num_threads_compaction >> 1); d > 0; d >>= 1)
     {
 
-        __syncthreads();
+        cg::sync(cta);
 
         if (tid < d)
         {
@@ -386,7 +392,7 @@ createIndicesCompaction(T *s_compaction_list_exc,
     {
 
         offset >>= 1;
-        __syncthreads();
+        cg::sync(cta);
 
         if (tid < (d-1))
         {
@@ -399,7 +405,7 @@ createIndicesCompaction(T *s_compaction_list_exc,
         }
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
 }
 
@@ -608,13 +614,13 @@ subdivideActiveInterval(const unsigned int tid,
         {
 
             mid = computeMidpoint(left, right);
-            all_threads_converged = 0;
+            atomicExch(&all_threads_converged, 0);
         }
         else if ((right_count - left_count) > 1)
         {
             // mark as not converged if multiple eigenvalues enclosed
             // duplicate interval in storeIntervalsConverged()
-            all_threads_converged = 0;
+            atomicExch(&all_threads_converged, 0);
         }
 
     }  // end for all active threads

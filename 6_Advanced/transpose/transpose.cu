@@ -23,6 +23,9 @@
 // description of this performance study.
 // ----------------------------------------------------------------------------------------
 
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
 // Utilities and system includes
 #include <helper_string.h>    // helper for string parsing
 #include <helper_image.h>     // helper for image and data comparison
@@ -73,6 +76,8 @@ __global__ void copy(float *odata, float *idata, int width, int height)
 
 __global__ void copySharedMem(float *odata, float *idata, int width, int height)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     __shared__ float tile[TILE_DIM][TILE_DIM];
 
     int xIndex = blockIdx.x * TILE_DIM + threadIdx.x;
@@ -88,7 +93,7 @@ __global__ void copySharedMem(float *odata, float *idata, int width, int height)
         }
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     for (int i=0; i<TILE_DIM; i+=BLOCK_ROWS)
     {
@@ -122,6 +127,8 @@ __global__ void transposeNaive(float *odata, float *idata, int width, int height
 
 __global__ void transposeCoalesced(float *odata, float *idata, int width, int height)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     __shared__ float tile[TILE_DIM][TILE_DIM];
 
     int xIndex = blockIdx.x * TILE_DIM + threadIdx.x;
@@ -137,7 +144,7 @@ __global__ void transposeCoalesced(float *odata, float *idata, int width, int he
         tile[threadIdx.y+i][threadIdx.x] = idata[index_in+i*width];
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     for (int i=0; i<TILE_DIM; i+=BLOCK_ROWS)
     {
@@ -149,6 +156,8 @@ __global__ void transposeCoalesced(float *odata, float *idata, int width, int he
 
 __global__ void transposeNoBankConflicts(float *odata, float *idata, int width, int height)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     __shared__ float tile[TILE_DIM][TILE_DIM+1];
 
     int xIndex = blockIdx.x * TILE_DIM + threadIdx.x;
@@ -164,7 +173,7 @@ __global__ void transposeNoBankConflicts(float *odata, float *idata, int width, 
         tile[threadIdx.y+i][threadIdx.x] = idata[index_in+i*width];
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     for (int i=0; i<TILE_DIM; i+=BLOCK_ROWS)
     {
@@ -185,6 +194,8 @@ __global__ void transposeNoBankConflicts(float *odata, float *idata, int width, 
 
 __global__ void transposeDiagonal(float *odata, float *idata, int width, int height)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     __shared__ float tile[TILE_DIM][TILE_DIM+1];
 
     int blockIdx_x, blockIdx_y;
@@ -218,7 +229,7 @@ __global__ void transposeDiagonal(float *odata, float *idata, int width, int hei
         tile[threadIdx.y+i][threadIdx.x] = idata[index_in+i*width];
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     for (int i=0; i<TILE_DIM; i+=BLOCK_ROWS)
     {
@@ -237,6 +248,8 @@ __global__ void transposeDiagonal(float *odata, float *idata, int width, int hei
 
 __global__ void transposeFineGrained(float *odata, float *idata, int width, int height)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     __shared__ float block[TILE_DIM][TILE_DIM+1];
 
     int xIndex = blockIdx.x * TILE_DIM + threadIdx.x;
@@ -248,7 +261,7 @@ __global__ void transposeFineGrained(float *odata, float *idata, int width, int 
         block[threadIdx.y+i][threadIdx.x] = idata[index+i*width];
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     for (int i=0; i < TILE_DIM; i += BLOCK_ROWS)
     {
@@ -259,6 +272,8 @@ __global__ void transposeFineGrained(float *odata, float *idata, int width, int 
 
 __global__ void transposeCoarseGrained(float *odata, float *idata, int width, int height)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     __shared__ float block[TILE_DIM][TILE_DIM+1];
 
     int xIndex = blockIdx.x * TILE_DIM + threadIdx.x;
@@ -274,7 +289,7 @@ __global__ void transposeCoarseGrained(float *odata, float *idata, int width, in
         block[threadIdx.y+i][threadIdx.x] = idata[index_in+i*width];
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     for (int i=0; i<TILE_DIM; i += BLOCK_ROWS)
     {
@@ -338,16 +353,7 @@ void getParams(int argc, char **argv, cudaDeviceProp &deviceProp, int &size_x, i
     else
     {
         size_y = max_tile_dim;
-
-        // If this is SM12 hardware, we want to round down to a multiple of 512
-        if ((deviceProp.major == 1 && deviceProp.minor >= 2) || deviceProp.major > 1)
-        {
-            size_y = FLOOR(size_y, 512);
-        }
-        else     // else for SM10,SM11 we round down to a multiple of 384
-        {
-            size_y = FLOOR(size_y, 384);
-        }
+        size_y = FLOOR(size_y, 512);
     }
 }
 

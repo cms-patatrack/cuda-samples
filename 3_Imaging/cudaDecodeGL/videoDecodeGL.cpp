@@ -1,5 +1,5 @@
 /*
- * Copyright 1993-2015 NVIDIA Corporation.  All rights reserved.
+ * Copyright 1993-2017 NVIDIA Corporation.  All rights reserved.
  *
  * Please refer to the NVIDIA end user license agreement (EULA) associated
  * with this source code for terms and conditions that govern your use of
@@ -10,28 +10,27 @@
  */
 
 /* This example demonstrates how to use the Video Decode Library with CUDA
- * bindings to interop between NVCUVID(CUDA) and OpenGL (PBOs).  Post-Processing
- * video (de-interlacing) is supported with this sample.
+ * bindings to interop between NVDECODE(using CUDA surfaces) and OpenGL (PBOs).
+ * Post-Processing video (de-interlacing) is supported with this sample.
  */
 
 // OpenGL Graphics includes
-#include <helper_gl.h>
+#include <GL/glew.h>
 #if defined(__APPLE__) || defined(__MACOSX)
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #include <GLUT/glut.h>
 #else
 #include <GL/freeglut.h>
 #endif
 
 // CUDA Header includes
-#include <cuda.h>
-#include <cudaGL.h>
+#include "dynlink_nvcuvid.h" // <nvcuvid.h>
+#include "dynlink_cuda.h"    // <cuda.h>
+#include "dynlink_cudaGL.h"  // <cudaGL.h>
+#include "dynlink_builtin_types.h"
 
 // CUDA utilities and system includes
-#include <helper_functions.h>
-#include <helper_cuda.h>
-#include <helper_cuda_drvapi.h>
-#include <helper_cuda_gl.h>
+#include "helper_functions.h"
+#include "helper_cuda_drvapi.h"
 
 // Includes
 #include <stdlib.h>
@@ -52,7 +51,7 @@
 #include "cudaProcessFrame.h"
 #include "cudaModuleMgr.h"
 
-#if !defined(WIN32) && !defined(_WIN32) && !defined(WIN64) && !defined(_WIN64)
+#if !defined (WIN32) && !defined (_WIN32) && !defined(WIN64) && !defined(_WIN64)
 typedef unsigned char BYTE;
 #define S_OK true;
 #endif
@@ -88,17 +87,24 @@ bool                g_bLoop       = false;
 bool                g_bUpdateCSC  = true;
 bool                g_bUpdateAll  = false;
 bool                g_bLinearFiltering = false;
-bool                g_bUseDisplay = false; // this flag enables/disables video on the window
+bool                g_bUseDisplay = true; // this flag enables/disables video on the window
 bool                g_bUseInterop = true;
-bool                g_bReadback   = false;
+bool                g_bReadback   = false; // this flag enables/disables reading back of a video from a window
+bool                g_bWriteFile  = false; // this flag enables/disables writing of a file
+bool                g_bPSNR = false; // if this flag is set true, then we want to compute the PSNR
 bool                g_bIsProgressive = true; // assume it is progressive, unless otherwise noted
-bool                g_bException = false;
+bool                g_bException  = false;
 bool                g_bWaived     = false;
 
 int                 g_iRepeatFactor = 1; // 1:1 assumes no frame repeats
+long                g_nFrameStart   = -1;
+long                g_nFrameEnd     = -1;
 
-int *pArgc = NULL;
+int   *pArgc = NULL;
 char **pArgv = NULL;
+
+FILE *fpWriteYUV = NULL;
+FILE *fpRefYUV = NULL;
 
 cudaVideoCreateFlags g_eVideoCreateFlags = cudaVideoCreate_PreferCUVID;
 CUvideoctxlock       g_CtxLock = NULL;
@@ -121,14 +127,16 @@ eColorSpace        g_eColorSpace = ITU601;
 float              g_nHue        = 0.0f;
 
 // System Memory surface we want to readback to
-BYTE          *g_bFrameData[2] = { 0, 0 };
+BYTE          *g_pFrameYUV[6] = { 0, 0, 0, 0, 0, 0 };
 FrameQueue    *g_pFrameQueue   = 0;
 VideoSource   *g_pVideoSource  = 0;
 VideoParser   *g_pVideoParser  = 0;
-VideoDecoder *g_pVideoDecoder = 0;
+VideoDecoder  *g_pVideoDecoder = 0;
 
 ImageGL       *g_pImageGL      = 0; // if we're using OpenGL
-CUdeviceptr    g_pInteropFrame[2] = { 0, 0 }; // if we're using CUDA malloc
+CUdeviceptr    g_pInteropFrame[3] = { 0, 0, 0 }; // if we're using CUDA malloc
+
+CUVIDEOFORMAT g_stFormat;
 
 std::string sFileName;
 
@@ -167,7 +175,7 @@ bool drawScene(int field_num);
 bool cleanup(bool bDestroyContext);
 bool initCudaResources(int argc, char **argv, int *bTCC);
 
-bool renderVideoFrame(int bUseInterop);
+void renderVideoFrame(int bUseInterop);
 
 #if defined(WIN32) || defined(_WIN32) || defined(WIN64) || defined(_WIN64)
 typedef bool (APIENTRY *PFNWGLSWAPINTERVALFARPROC)(int);
@@ -226,7 +234,7 @@ void printStatistics()
     mm   = (int)(total_time/(1000*60)) % 60;
     hh   = (int)(total_time/(1000*60*60)) % 60;
 
-    printf("\n[%s] statistics\n", sAppFilename);
+    printf("\n[%s] statistics\n", sSDKname);
     printf("\t Video Length (hh:mm:ss.msec)   = %02d:%02d:%02d.%03d\n", hh, mm, ss, msec);
 
     printf("\t Frames Presented (inc repeats) = %d\n", g_FrameCount);
@@ -243,6 +251,11 @@ void computeFPS(int bUseInterop)
     if (g_bRunning)
     {
         g_fpsCount++;
+
+        if (!(g_pFrameQueue->isEndOfDecode() && g_pFrameQueue->isEmpty()))
+        {
+            g_FrameCount++;
+        }
     }
 
     char sFPS[256];
@@ -266,60 +279,7 @@ void computeFPS(int bUseInterop)
         return;
     }
 
-    if (!g_pFrameQueue->isDecodeFinished() && !g_bRunning)
-    {
-        sDecodeStatus = "PAUSE\0";
-        sprintf(sFPS, "%s [%s] - [%s %d] - Video Display %s / Vsync %s",
-                sAppFilename, sDecodeStatus.c_str(),
-                (g_bIsProgressive ? "Frame" : "Field"),
-                g_DecodeFrameCount,
-                g_bUseDisplay ? "ON" : "OFF",
-                g_bUseVsync   ? "ON" : "OFF");
-
-        if (bUseInterop && (!g_bQAReadback || g_bGLVerify))
-        {
-            glutSetWindowTitle(sFPS);
-        }
-
-    }
-    else
-    {
-        if (g_bFrameStep)
-        {
-            sDecodeStatus = "STEP\0";
-        }
-        else
-        {
-            sDecodeStatus = "PLAY\0";
-        }
-    }
-
-    if (g_fpsCount == g_fpsLimit)
-    {
-        float ifps = 1.f / (sdkGetAverageTimerValue(&frame_timer) / 1000.f);
-
-        sprintf(sFPS, "%s [%s] - [%3.1f fps, %s %d] - Video Display %s / Vsync %s",
-                sAppFilename, sDecodeStatus.c_str(), ifps,
-                (g_bIsProgressive ? "Frame" : "Field"),
-                g_DecodeFrameCount,
-                g_bUseDisplay ? "ON" : "OFF",
-                g_bUseVsync   ? "ON" : "OFF");
-
-        if (bUseInterop)
-        {
-            glutSetWindowTitle(sFPS);
-        }
-
-        printf("[%s] - [%s: %04d, %04.1f fps, frame time: %04.2f (ms) ]\n",
-               sAppFilename,
-               (g_bIsProgressive ? "Frame" : "Field"),
-               g_FrameCount, ifps, 1000.f/ifps);
-
-        sdkResetTimer(&frame_timer);
-        g_fpsCount = 0;
-    }
-
-    if ((g_bDone && g_bAutoQuit) || g_pFrameQueue->isDecodeFinished())
+    if (g_pFrameQueue->isEndOfDecode() && g_pFrameQueue->isEmpty())
     {
         sDecodeStatus = "STOP (End of File)\0";
 
@@ -330,11 +290,75 @@ void computeFPS(int bUseInterop)
         }
 
         sdkStopTimer(&global_timer);
+
+        if (g_bAutoQuit)
+        {
+            g_bRunning = false;
+            g_bDone    = true;
+        }
+
     }
     else
     {
-        sdkStartTimer(&frame_timer);
+        if (!g_bRunning)
+        {
+            sDecodeStatus = "PAUSE\0";
+            sprintf(sFPS, "%s [%s] - [%s %d] - Video Display %s / Vsync %s",
+                    sAppName, sDecodeStatus.c_str(),
+                    (g_bIsProgressive ? "Frame" : "Field"), g_DecodeFrameCount,
+                    g_bUseDisplay ? "ON" : "OFF",
+                    g_bUseVsync   ? "ON" : "OFF");
+
+            if (bUseInterop && (!g_bQAReadback || g_bGLVerify))
+            {
+                glutSetWindowTitle(sFPS);
+            }
+
+        }
+        else
+        {
+            if (g_bFrameStep)
+            {
+                sDecodeStatus = "STEP\0";
+            }
+            else
+            {
+                sDecodeStatus = "PLAY\0";
+            }
+        }
+
+        if (g_fpsCount == g_fpsLimit)
+        {
+            float ifps = 1.f / (sdkGetAverageTimerValue(&frame_timer) / 1000.f);
+
+            sprintf(sFPS, "[%s] [%s] - [%3.1f fps, %s %d] - Video Display %s / Vsync %s",
+                    sAppName, sDecodeStatus.c_str(), ifps,
+                    (g_bIsProgressive ? "Frame" : "Field"), g_DecodeFrameCount,
+                    g_bUseDisplay ? "ON" : "OFF",
+                    g_bUseVsync   ? "ON" : "OFF");
+
+            if (bUseInterop)
+            {
+                glutSetWindowTitle(sFPS);
+            }
+
+            printf("[%s] - [%s: %04d, %04.1f fps, time: %04.2f (ms) ]\n",
+                   sSDKname, (g_bIsProgressive ? "Frame" : "Field"), g_FrameCount, ifps, 1000.f/ifps);
+
+            sdkResetTimer(&frame_timer);
+            g_fpsCount = 0;
+        }
     }
+
+    if (g_bDone && g_bAutoQuit && bUseInterop)
+    {
+        printStatistics();
+
+        cleanup(true);
+        exit(EXIT_SUCCESS);
+    }
+
+    sdkStartTimer(&frame_timer);
 }
 
 bool initCudaResources(int argc, char **argv, int *bTCC)
@@ -351,32 +375,31 @@ bool initCudaResources(int argc, char **argv, int *bTCC)
     CUdevice cuda_device;
 
     // Device is specified at the command line, we need to check if this it TCC or not, and then call the
-    // appropriate TCC/non-TCC findCudaDevice in order to initialize the CUDA device
+    // appropriate TCC/WDDM findCudaDevice in order to initialize the CUDA device
     if (checkCmdLineFlag(argc, (const char **)argv, "device"))
     {
-        cuda_device = getCmdLineArgumentInt(argc, (const char **) argv, "device");
+        char name[100];
 
+        cuda_device = getCmdLineArgumentInt(argc, (const char **) argv, "device");
         cuda_device = findCudaDeviceDRV(argc, (const char **)argv);
         checkCudaErrors(cuDeviceGetAttribute(bTCC,  CU_DEVICE_ATTRIBUTE_TCC_DRIVER, cuda_device));
-
+        checkCudaErrors(cuDeviceGetName(name, 100, cuda_device));
+        printf("  -> GPU %d: < %s > driver mode is: %s\n", cuda_device, name, *bTCC ? "TCC" : "WDDM");
+        
+        // If we detect a TCC device, we always force interop to be off.  Otherwise it is optinal.
         if (*bTCC)
         {
-            char name[100];
-            cuDeviceGetName(name, 100, cuda_device);
-            printf("CUDA device=%d [%s] is a TCC Compute device\n", cuda_device, name);
             g_bUseInterop = false;
+        }
+
+        if (g_bUseInterop)
+        {
+            initGL(argc, argv, bTCC);
+            cuda_device = findCudaGLDeviceDRV(argc, (const char **)argv);
         }
         else
         {
-            if (g_bUseInterop)
-            {
-                initGL(argc, argv, bTCC);
-                cuda_device = findCudaGLDeviceDRV(argc, (const char **)argv);
-            }
-            else
-            {
-                cuda_device = findCudaDeviceDRV(argc, (const char **)argv);
-            }
+            cuda_device = findCudaDeviceDRV(argc, (const char **)argv);
         }
 
         if (cuda_device < 0)
@@ -390,44 +413,37 @@ bool initCudaResources(int argc, char **argv, int *bTCC)
     else
     {
         // If we want to use Graphics Interop, then choose the GPU that is capable
+        initGL(argc, argv, bTCC);
+
+        if (*bTCC)
+        {
+            g_bUseInterop = false;
+        }
+
         if (g_bUseInterop && !(*bTCC))
         {
-            initGL(argc, argv, bTCC);
-            // If we have found only TCC devices while trying to init OpenGL
-            // don't try to use OpenGL
-            if (!(*bTCC))
-            {
-                cuda_device = findCudaGLDeviceDRV(argc, (const char **)argv);
-            }
-            else
-            {
-                cuda_device = findCudaDeviceDRV(argc, (const char **)argv);
-                g_bUseInterop = false;
-            }
+            cuda_device = findCudaGLDeviceDRV(argc, (const char **)argv);
+            checkCudaErrors(cuDeviceGet(&g_oDevice, cuda_device));
         }
         else
         {
             cuda_device = findCudaDeviceDRV(argc, (const char **)argv);
-            g_bUseInterop = false;
+            checkCudaErrors(cuDeviceGet(&g_oDevice, cuda_device));
         }
-        checkCudaErrors(cuDeviceGet(&g_oDevice, cuda_device));
     }
 
     // get compute capabilities and the devicename
     int major, minor;
     size_t totalGlobalMem;
-
     char deviceName[256];
     checkCudaErrors(cuDeviceComputeCapability(&major, &minor, g_oDevice));
     checkCudaErrors(cuDeviceGetName(deviceName, 256, g_oDevice));
-    printf("> Using GPU Device: %s has SM %d.%d compute capability\n", deviceName, major, minor);
+    printf("> Using GPU Device %d: %s has SM %d.%d compute capability\n", cuda_device, deviceName, major, minor);
 
     checkCudaErrors(cuDeviceTotalMem(&totalGlobalMem, g_oDevice));
     printf("  Total amount of global memory:     %4.4f MB\n", (float)totalGlobalMem/(1024*1024));
 
-
-
-    // Create CUDA Device w/ GL interop (if not TCC), otherwise CUDA w/o interop (if TCC)
+    // Create CUDA Device w/ GL interop (if WDDM), otherwise CUDA w/o interop (if TCC)
     // (use CU_CTX_BLOCKING_SYNC for better CPU synchronization)
     if (g_bUseInterop && !(*bTCC))
     {
@@ -474,8 +490,8 @@ bool initCudaResources(int argc, char **argv, int *bTCC)
     }
     else
     {
-        checkCudaErrors(cuMemAlloc(&g_pInteropFrame[0], g_pVideoDecoder->targetWidth() * g_pVideoDecoder->targetHeight() * 2));
-        checkCudaErrors(cuMemAlloc(&g_pInteropFrame[1], g_pVideoDecoder->targetWidth() * g_pVideoDecoder->targetHeight() * 2));
+        checkCudaErrors(cuMemAlloc(&g_pInteropFrame[0], g_pVideoDecoder->targetWidth() * g_pVideoDecoder->targetHeight() * 4));
+        checkCudaErrors(cuMemAlloc(&g_pInteropFrame[1], g_pVideoDecoder->targetWidth() * g_pVideoDecoder->targetHeight() * 4));
     }
 
     CUcontext cuCurrent = NULL;
@@ -516,22 +532,28 @@ void displayHelp()
     printf("%s - Help\n\n", sAppName);
     printf("  %s [parameters] [video_file]\n\n", sAppFilename);
     printf("Program parameters:\n");
-    printf("\t-decodecuda   - Use CUDA for MPEG-2 (Available with 64+ CUDA cores)\n");
-    printf("\t-decodedxva   - Use VP for MPEG-2, VC-1, H.264 decode.\n");
-    printf("\t-decodecuvid  - Use VP for MPEG-2, VC-1, H.264 decode (optimized)\n");
-    printf("\t-vsync        - Enable vertical sync.\n");
-    printf("\t-novsync      - Disable vertical sync.\n");
-    printf("\t-repeatframe  - Enable frame repeats.\n");
-    printf("\t-updateall    - always update CSC matrices.\n");
-    printf("\t-displayvideo - display video frames on the window\n");
-    printf("\t-nointerop    - create the CUDA context w/o using graphics interop\n");
-    printf("\t-readback     - enable readback of frames to system memory\n");
-    printf("\t-device=n     - choose a specific GPU device to decode video with\n");
+    printf("\t-i=source.264   - input file for decoding\n");
+    printf("\t-o=output.yuv   - specify base Input file for YUV output\n");
+    printf("\t-psnr=ref.yuv   - compare PSNR against reference YUV\n");
+    printf("\t-decodecuda     - Use CUDA kernels for MPEG-2 (Available with 64+ CUDA cores)\n");
+    printf("\t-decodecuvid    - Use NVDEC for MPEG-2, VC-1, H.264, or H.265 decode\n");
+    printf("\t-vsync          - Enable vertical sync.\n");
+    printf("\t-novsync        - Disable vertical sync.\n");
+    printf("\t-repeatframe    - Enable automatic framerate repeating.\n");
+    printf("\t-repeatfactor=n - Force repeat every frame n times.\n");
+    printf("\t-updateall      - always update CSC matrices.\n");
+    printf("\t-displayvideo   - display video frames on the window\n");
+    printf("\t-nointerop      - create the CUDA context w/o using graphics interop\n");
+    printf("\t-readback       - enable readback of frames to system memory\n");
+    printf("\t-device=n       - choose a specific GPU device to decode video with\n");
+    printf("\t-nframestart=n  - set the start frame number\n");
+    printf("\t-nframeend=n    - set the end frame number\n");
 }
 
 void parseCommandLineArguments(int argc, char *argv[])
 {
-    char video_file[256];
+    char video_file[256], yuv_file[256], ref_yuv[256];
+    bool bUseDefaultInputFile = true;
 
     printf("Command Line Arguments:\n");
 
@@ -545,15 +567,38 @@ void parseCommandLineArguments(int argc, char *argv[])
         displayHelp();
         exit(EXIT_SUCCESS);
     }
+    if (checkCmdLineFlag(argc, (const char **)argv, "i"))
+    {
+        char *temp;
+        getCmdLineArgumentString(argc, (const char **)argv, "i", &temp);
+        strcpy(video_file, temp);
+        bUseDefaultInputFile = false;
+    }
+
+    // Search all command file parameters for video files with extensions:
+    // mp4, avc, mkv, 264, h264. vc1, wmv, mp2, mpeg2, mpg
+    if (checkCmdLineFlag(argc, (const char **)argv, "o"))
+    {
+        char *temp;
+        getCmdLineArgumentString(argc, (const char **)argv, "o", &temp);
+        strcpy(yuv_file, temp);
+        g_bReadback = true;
+        g_bWriteFile = true;
+    }
+
+    // Search all command file parameters for video files with extensions:
+    // mp4, avc, mkv, 264, h264. vc1, wmv, mp2, mpeg2, mpg
+    if (checkCmdLineFlag(argc, (const char **)argv, "psnr"))
+    {
+        char *temp;
+        getCmdLineArgumentString(argc, (const char **)argv, "psnr", &temp);
+        strcpy(ref_yuv, temp);
+        g_bPSNR = true;
+    }
 
     if (checkCmdLineFlag(argc, (const char **)argv, "decodecuda"))
     {
         g_eVideoCreateFlags = cudaVideoCreate_PreferCUDA;
-    }
-
-    if (checkCmdLineFlag(argc, (const char **)argv, "decodedxva"))
-    {
-        g_eVideoCreateFlags = cudaVideoCreate_PreferDXVA;
     }
 
     if (checkCmdLineFlag(argc, (const char **)argv, "decodecuvid"))
@@ -574,12 +619,20 @@ void parseCommandLineArguments(int argc, char *argv[])
     if (checkCmdLineFlag(argc, (const char **)argv, "repeatframe"))
     {
         g_bFrameRepeat = true;
+        printf("> Framerate Repeating Enabled\n");
+    }
+
+    if (checkCmdLineFlag(argc, (const char **)argv, "repeatfactor"))
+    {
+        g_iRepeatFactor = getCmdLineArgumentInt(argc, (const char **)argv, "repeatfactor");
+        printf("g_iRepeatFactor = %d\n", g_iRepeatFactor);
     }
 
     if (checkCmdLineFlag(argc, (const char **)argv, "framestep"))
     {
-        g_bFrameStep     = true;
-        g_bUseDisplay    = true;
+        g_bFrameStep = true;
+        g_bUseDisplay = true;
+        g_bUseInterop = true;
         g_fpsLimit = 1;
     }
 
@@ -597,6 +650,7 @@ void parseCommandLineArguments(int argc, char *argv[])
     if (checkCmdLineFlag(argc, (const char **)argv, "nointerop"))
     {
         g_bUseInterop = false;
+        printf("NVDECODE/OpenGL graphics interop disabled\n");
     }
 
     if (checkCmdLineFlag(argc, (const char **)argv, "readback"))
@@ -607,44 +661,46 @@ void parseCommandLineArguments(int argc, char *argv[])
     if (checkCmdLineFlag(argc, (const char **)argv, "device"))
     {
         g_DeviceID = getCmdLineArgumentInt(argc, (const char **)argv, "device");
-        //        g_bUseDisplay    = true;
+    }
+    if (checkCmdLineFlag(argc, (const char **)argv, "nframestart"))
+    {
+        g_nFrameStart = getCmdLineArgumentInt(argc, (const char **)argv, "nframestart");
+        printf("YUV output @ nStartFrame = %d\n", g_nFrameStart);
+    }
+    if (checkCmdLineFlag(argc, (const char **)argv, "nframeend"))
+    {
+        g_nFrameEnd = getCmdLineArgumentInt(argc, (const char **)argv, "nframeend");
+        printf("YUV output @ nStartEnd = %d\n", g_nFrameEnd);
     }
 
     if (g_bUseDisplay == false)
     {
         g_bQAReadback = true;
+        g_bUseInterop = false;
     }
 
     if (g_bLoop == false)
     {
         g_bAutoQuit = true;
     }
-
-    // Search all command file parameters for video files with extensions:
-    // mp4, avc, mkv, 264, h264. vc1, wmv, mp2, mpeg2, mpg
-    char *file_ext = NULL;
-
-    for (int i=1; i < argc; i++)
+    if (bUseDefaultInputFile)
     {
-        if (getFileExtension(argv[i], &file_ext) > 0)
-        {
-            strcpy(video_file, argv[i]);
-            break;
-        }
+        strcpy(video_file, sdkFindFilePath(VIDEO_SOURCE_FILE, argv[0]));
     }
 
-    // We load the default video file for the CUDA Sample
-    if (file_ext == NULL)
+
+    // We load the default video file for the SDK sample
+    if (bUseDefaultInputFile)
     {
         strcpy(video_file, sdkFindFilePath(VIDEO_SOURCE_FILE, argv[0]));
     }
 
     // Now verify the video file is legit
-    FILE *fp = fopen(video_file, "r");
-
-    if (video_file == NULL && fp == NULL)
+    FILE *fp = NULL;
+    FOPEN(fp, video_file, "r");
+    if (fp == NULL)
     {
-        printf("[%s]: unable to find file: <%s>\nExiting...\n", sAppFilename, VIDEO_SOURCE_FILE);
+        printf("[%s]: unable to find file: [%s]\nExiting...\n", sAppFilename, VIDEO_SOURCE_FILE);
         exit(EXIT_FAILURE);
     }
 
@@ -653,22 +709,85 @@ void parseCommandLineArguments(int argc, char *argv[])
         fclose(fp);
     }
 
+    // Now verify the input reference YUV file is legit
+    FOPEN(fpRefYUV, ref_yuv, "r");
+    if (ref_yuv == NULL && fpRefYUV == NULL)
+    {
+        printf("[%s]: unable to find file: [%s]\nExiting...\n", sAppFilename, ref_yuv);
+        exit(EXIT_FAILURE);
+    }
+
     // default video file loaded by this sample
     sFileName = video_file;
+
+    if (g_bWriteFile && strlen(yuv_file) > 0)
+    {
+        printf("[%s]: output file: [%s]\n", sAppFilename, yuv_file);
+
+        FOPEN(fpWriteYUV, yuv_file, "wb");
+        if (fpWriteYUV == NULL)
+        {
+            printf("Error opening file [%s]\n", yuv_file);
+        }
+    }
 
     // store the current path so we can reinit the CUDA context
     strcpy(exec_path, argv[0]);
 
-    printf("[%s]: input file: <%s>\n", sAppFilename, video_file);
+    printf("[%s]: input file:  [%s]\n", sAppFilename, video_file);
+}
+
+void SaveFrameAsYUV(unsigned char *pdst,
+    const unsigned char *psrc,
+    int width, int height, int pitch)
+{
+    int x, y, width_2, height_2;
+    int xy_offset = width*height;
+    int uvoffs = (width / 2)*(height / 2);
+    const unsigned char *py = psrc;
+    const unsigned char *puv = psrc + height*pitch;
+
+    if (((long)g_DecodeFrameCount >= g_nFrameStart) &&
+        ((long)g_DecodeFrameCount <= g_nFrameEnd)
+        )
+    {
+        //      printf(" Saving YUV Frame %d (start,end)=(%d,%d)\n", g_DecodeFrameCount, g_nFrameStart, g_nFrameEnd);
+        printf("%d+", g_DecodeFrameCount);
+    }
+    else if ((g_nFrameStart == -1) && (g_nFrameEnd == -1))
+    {
+        printf("+");
+    }
+    else // we do nothing and exit
+    {
+        return;
+    }
+
+    // luma
+    for (y = 0; y<height; y++)
+    {
+        memcpy(&pdst[y*width], py, width);
+        py += pitch;
+    }
+
+    // De-interleave chroma
+    width_2 = width >> 1;
+    height_2 = height >> 1;
+    for (y = 0; y<height_2; y++)
+    {
+        for (x = 0; x<width_2; x++)
+        {
+            pdst[xy_offset + y*(width_2)+x] = puv[x * 2];
+            pdst[xy_offset + uvoffs + y*(width_2)+x] = puv[x * 2 + 1];
+        }
+        puv += pitch;
+    }
+
+    fwrite(pdst, 1, width*height + (width*height) / 2, fpWriteYUV);
 }
 
 int main(int argc, char *argv[])
 {
-
-#if defined(__linux__)
-    setenv ("DISPLAY", ":0", 0);
-#endif
-
     printf("[%s]\n", sAppName);
 
     sdkCreateTimer(&frame_timer);
@@ -680,7 +799,17 @@ int main(int argc, char *argv[])
     // parse the command line arguments
     parseCommandLineArguments(argc, argv);
 
-    // Find out the video size
+    // Initialize the CUDA and NVDECODE
+#if defined(WIN32) || defined(_WIN32) || defined(WIN64) || defined(_WIN64)
+    typedef HMODULE CUDADRIVER;
+#else
+    typedef void *CUDADRIVER;
+#endif
+    CUDADRIVER hHandleDriver = 0;
+    cuInit   (0, __CUDA_API_VERSION, hHandleDriver);
+    cuvidInit(0);
+
+    // Find out the video size (uses NVDECODE calls)
     g_bIsProgressive = loadVideoSource(sFileName.c_str(),
                                        g_nVideoWidth, g_nVideoHeight,
                                        g_nWindowWidth, g_nWindowHeight);
@@ -697,18 +826,15 @@ int main(int argc, char *argv[])
     g_nVideoWidth   = PAD_ALIGN(g_nVideoWidth   , 0x3F);
     g_nVideoHeight  = PAD_ALIGN(g_nVideoHeight  , 0x0F);
 
-    // Initialize the CUDA Device
-    cuInit(0);
-
     // Initialize CUDA and try to connect with an OpenGL context
     // Other video memory resources will be available
     int bTCC = 0;
 
     if (initCudaResources(argc, argv, &bTCC) == false)
     {
-        g_bAutoQuit = true;
+        g_bAutoQuit  = true;
         g_bException = true;
-        g_bWaived   = true;
+        g_bWaived    = true;
         goto ExitApp;
     }
 
@@ -721,11 +847,9 @@ int main(int argc, char *argv[])
     if (!g_bUseInterop)
     {
         // On this case we drive the display with a while loop (no openGL calls)
-        bool bQuit = false;
-
-        while (!bQuit)
+        while (!g_bDone)
         {
-            bQuit = renderVideoFrame(g_bUseInterop);
+            renderVideoFrame(g_bUseInterop);
         }
     }
     else
@@ -733,10 +857,23 @@ int main(int argc, char *argv[])
         glutMainLoop();
     }
 
+    // we only want to record this once
+    if (total_time == 0.0f)
+    {
+        total_time = sdkGetTimerValue(&global_timer);
+    }
+    sdkStopTimer(&global_timer);
+
     g_pFrameQueue->endDecode();
     g_pVideoSource->stop();
 
-    computeFPS(g_bUseInterop);
+    if (fpWriteYUV != NULL)
+    {
+        fflush(fpWriteYUV);
+        fclose(fpWriteYUV);
+        fpWriteYUV = NULL;
+    }
+
     printStatistics();
 
 ExitApp:
@@ -759,20 +896,7 @@ ExitApp:
 // display results using OpenGL
 void display()
 {
-    bool bQuit = false;
-    bQuit = renderVideoFrame(true);
-
-    if (bQuit)
-    {
-        g_pFrameQueue->endDecode();
-        g_pVideoSource->stop();
-
-        computeFPS(g_bUseInterop);
-        printStatistics();
-
-        cleanup(true);
-        exit(EXIT_SUCCESS);
-    }
+    renderVideoFrame(true);
 }
 
 
@@ -791,9 +915,7 @@ void keyboard(unsigned char key, int x, int y)
                 g_pVideoSource->stop();
             }
 
-            computeFPS(g_bUseInterop);
             printStatistics();
-
             cleanup(true);
             exit(EXIT_FAILURE);
             break;
@@ -854,7 +976,7 @@ bool initGL(int argc, char **argv, int *pbTCC)
 
         while (argv[i][string_start++] != '-');
 
-        char *string_argv = &argv[i][string_start];
+        const char *string_argv = &argv[i][string_start];
 
         if (!STRNCASECMP(string_argv, "device=", 7))
         {
@@ -881,9 +1003,7 @@ bool initGL(int argc, char **argv, int *pbTCC)
 
 #if CUDA_VERSION >= 3020
             checkCudaErrors(cuDeviceGetAttribute(pbTCC ,  CU_DEVICE_ATTRIBUTE_TCC_DRIVER, dev));
-#if defined(WIN32) || defined(_WIN32) || defined(WIN64) || defined(_WIN64)
             printf("  -> GPU %d: < %s > driver mode is: %s\n", dev, device_name, *pbTCC ? "TCC" : "WDDM");
-#endif
 
             if (*pbTCC)
             {
@@ -891,8 +1011,7 @@ bool initGL(int argc, char **argv, int *pbTCC)
             }
             else
             {
-                g_DeviceID = i; // we choose an available non-TCC display device
-                break;
+                g_DeviceID = i; // we choose an available WDDM display device
             }
 
 #else
@@ -928,9 +1047,7 @@ bool initGL(int argc, char **argv, int *pbTCC)
 
 #if CUDA_VERSION >= 3020
         checkCudaErrors(cuDeviceGetAttribute(pbTCC ,  CU_DEVICE_ATTRIBUTE_TCC_DRIVER, dev));
-#if defined(WIN32) || defined(_WIN32) || defined(WIN64) || defined(_WIN64)
         printf("  -> GPU %d: < %s > driver mode is: %s\n", dev, device_name, *pbTCC ? "TCC" : "WDDM");
-#endif
 #else
 
         // We don't know for sure if this is a TCC device or not, if it is Tesla we will not run
@@ -955,7 +1072,7 @@ bool initGL(int argc, char **argv, int *pbTCC)
         glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE);
         glutInitWindowSize(g_nWindowWidth, g_nWindowHeight);
         glutCreateWindow(sAppName);
-		reshape(g_nWindowWidth, g_nWindowHeight);
+        reshape(g_nWindowWidth, g_nWindowHeight);
 
         printf(">> initGL() creating window [%d x %d]\n", g_nWindowWidth, g_nWindowHeight);
 
@@ -964,8 +1081,9 @@ bool initGL(int argc, char **argv, int *pbTCC)
         glutKeyboardFunc(keyboard);
         glutIdleFunc(idle);
 
-        if (!isGLVersionSupported(1,5) ||
-            !areGLExtensionsSupported("GL_ARB_vertex_buffer_object GL_ARB_pixel_buffer_object"))
+        glewInit();
+
+        if (!glewIsSupported("GL_VERSION_1_5 GL_ARB_vertex_buffer_object GL_ARB_pixel_buffer_object"))
         {
             fprintf(stderr, "Error: failed to get minimal extensions for demo\n");
             fprintf(stderr, "This sample requires:\n");
@@ -975,10 +1093,7 @@ bool initGL(int argc, char **argv, int *pbTCC)
             return true;
         }
 
-        if (!g_bUseVsync)
-        {
-            setVSync(0);
-        }
+        setVSync(g_bUseVsync ? 1 : 0);
     }
     else
     {
@@ -995,7 +1110,7 @@ initGLTexture(unsigned int nWidth, unsigned int nHeight)
 {
     g_pImageGL = new ImageGL(nWidth, nHeight,
                              nWidth, nHeight,
-                             g_bIsProgressive,
+                             g_bUseVsync,
                              ImageGL::BGRA_PIXEL_FORMAT);
     g_pImageGL->clear(0x80);
 
@@ -1003,6 +1118,7 @@ initGLTexture(unsigned int nWidth, unsigned int nHeight)
     g_pImageGL->setCUDAdevice(g_oDevice);
     return true;
 }
+
 
 bool
 loadVideoSource(const char *video_file,
@@ -1016,19 +1132,23 @@ loadVideoSource(const char *video_file,
     apVideoSource->getSourceDimensions(width, height);
     apVideoSource->getSourceDimensions(dispWidth, dispHeight);
 
-    std::cout << apVideoSource->format() << std::endl;
+    memset(&g_stFormat, 0, sizeof(CUVIDEOFORMAT));
+    std::cout << (g_stFormat = apVideoSource->format()) << std::endl;
 
     if (g_bFrameRepeat)
     {
-        g_iRepeatFactor = (int)(60.0f / ceil((float)apVideoSource->format().frame_rate.numerator / (float)apVideoSource->format().frame_rate.denominator));
-        printf("Frame Rate Playback Speed = %d fps\n", 60 / g_iRepeatFactor);
+        if (apVideoSource->format().frame_rate.denominator > 0)
+        {
+            g_iRepeatFactor = (int)(60.0f / ceil((float)apVideoSource->format().frame_rate.numerator / (float)apVideoSource->format().frame_rate.denominator));
+        }
     }
+
+    printf("Frame Rate Playback Speed = %d fps\n", 60 / g_iRepeatFactor);
 
     g_pFrameQueue  = apFrameQueue.release();
     g_pVideoSource = apVideoSource.release();
 
-    if (g_pVideoSource->format().codec == cudaVideoCodec_JPEG ||
-        g_pVideoSource->format().codec == cudaVideoCodec_MPEG2)
+    if (g_pVideoSource->format().codec == cudaVideoCodec_JPEG)
     {
         g_eVideoCreateFlags = cudaVideoCreate_PreferCUDA;
     }
@@ -1043,6 +1163,9 @@ initCudaVideo()
 {
     // bind the context lock to the CUDA context
     CUresult result = cuvidCtxLockCreate(&g_CtxLock, g_oContext);
+    CUVIDEOFORMATEX oFormatEx;
+    memset(&oFormatEx, 0, sizeof(CUVIDEOFORMATEX));
+    oFormatEx.format = g_stFormat;
 
     if (result != CUDA_SUCCESS)
     {
@@ -1050,14 +1173,8 @@ initCudaVideo()
         assert(0);
     }
 
-    size_t totalGlobalMem;
-    size_t freeMem;
-
-    cuMemGetInfo(&freeMem,&totalGlobalMem);
-    printf("  Free memory:     %4.4f MB\n", (float)freeMem/(1024*1024));
-
     std::auto_ptr<VideoDecoder> apVideoDecoder(new VideoDecoder(g_pVideoSource->format(), g_oContext, g_eVideoCreateFlags, g_CtxLock));
-    std::auto_ptr<VideoParser> apVideoParser(new VideoParser(apVideoDecoder.get(), g_pFrameQueue, &g_oContext));
+    std::auto_ptr<VideoParser> apVideoParser(new VideoParser(apVideoDecoder.get(), g_pFrameQueue, &oFormatEx, &g_oContext));
     g_pVideoSource->setParser(*apVideoParser.get());
 
     g_pVideoParser  = apVideoParser.release();
@@ -1129,42 +1246,60 @@ bool copyDecodedFrameToTexture(unsigned int &nRepeats, int bUseInterop, int *pbI
     {
         CCtxAutoLock lck(g_CtxLock);
         // Push the current CUDA context (only if we are using CUDA decoding path)
-        CUresult result = cuCtxPushCurrent(g_oContext);
+        cuCtxPushCurrent(g_oContext);
 
-        CUdeviceptr  pDecodedFrame[2] = { 0, 0 };
-        CUdeviceptr  pInteropFrame[2] = { 0, 0 };
-        int num_fields = (oDisplayInfo.progressive_frame ? (1) : (2+oDisplayInfo.repeat_first_field));
+        CUdeviceptr  pDecodedFrame[3] = { 0, 0, 0 };
+        CUdeviceptr  pInteropFrame[3] = { 0, 0, 0 };
+
         *pbIsProgressive = oDisplayInfo.progressive_frame;
         g_bIsProgressive = oDisplayInfo.progressive_frame ? true : false;
 
-        for (int active_field=0; active_field<num_fields; active_field++)
-        {
-            nRepeats = oDisplayInfo.repeat_first_field;
-            CUVIDPROCPARAMS oVideoProcessingParameters;
-            memset(&oVideoProcessingParameters, 0, sizeof(CUVIDPROCPARAMS));
+        int num_fields = 1;
+        if (g_bUseVsync) {
+            num_fields = std::min(2 + oDisplayInfo.repeat_first_field, 3);            
+        }
+        nRepeats = num_fields;
 
-            oVideoProcessingParameters.progressive_frame = oDisplayInfo.progressive_frame;
-            oVideoProcessingParameters.second_field      = active_field;
-            oVideoProcessingParameters.top_field_first   = oDisplayInfo.top_field_first;
-            oVideoProcessingParameters.unpaired_field    = (num_fields == 1);
+        CUVIDPROCPARAMS oVideoProcessingParameters;
+        memset(&oVideoProcessingParameters, 0, sizeof(CUVIDPROCPARAMS));
 
+        oVideoProcessingParameters.progressive_frame = oDisplayInfo.progressive_frame;        
+        oVideoProcessingParameters.top_field_first = oDisplayInfo.top_field_first;
+        oVideoProcessingParameters.unpaired_field = (oDisplayInfo.repeat_first_field < 0);
+
+        for (int active_field = 0; active_field < num_fields; active_field++) {
+            unsigned int nDecodedPitch = 0;
             unsigned int nWidth = 0;
             unsigned int nHeight = 0;
-            unsigned int nDecodedPitch = 0;
 
-            // map decoded video frame to CUDA surface
-            g_pVideoDecoder->mapFrame(oDisplayInfo.picture_index, &pDecodedFrame[active_field], &nDecodedPitch, &oVideoProcessingParameters);
-            nWidth  = PAD_ALIGN(g_pVideoDecoder->targetWidth() , 0x3F);
-            nHeight = PAD_ALIGN(g_pVideoDecoder->targetHeight(), 0x0F);
+            oVideoProcessingParameters.second_field = active_field;
+
+            // map decoded video frame to CUDA surfae
+            if (g_pVideoDecoder->mapFrame(oDisplayInfo.picture_index, &pDecodedFrame[active_field], &nDecodedPitch, &oVideoProcessingParameters) != CUDA_SUCCESS)
+            {
+                // release the frame, so it can be re-used in decoder
+                g_pFrameQueue->releaseFrame(&oDisplayInfo);
+
+                // Detach from the Current thread
+                checkCudaErrors(cuCtxPopCurrent(NULL));
+
+                return false;
+            }
+            nWidth = g_pVideoDecoder->targetWidth(); // PAD_ALIGN(g_pVideoDecoder->targetWidth(), 0x3F);
+            nHeight = g_pVideoDecoder->targetHeight(); // PAD_ALIGN(g_pVideoDecoder->targetHeight(), 0x0F);
             // map OpenGL PBO or CUDA memory
-            size_t pFramePitch = 0;
+            size_t nTexturePitch = 0;
 
             // If we are Encoding and this is the 1st Frame, we make sure we allocate system memory for readbacks
             if (g_bReadback && g_bFirstFrame && g_ReadbackSID)
             {
                 CUresult result;
-                checkCudaErrors(result = cuMemAllocHost((void **)&g_bFrameData[0], (nDecodedPitch * nHeight * 3 / 2)));
-                checkCudaErrors(result = cuMemAllocHost((void **)&g_bFrameData[1], (nDecodedPitch * nHeight * 3 / 2)));
+                checkCudaErrors(result = cuMemAllocHost((void **)&g_pFrameYUV[0], (nDecodedPitch * nHeight + nDecodedPitch*nHeight/2)));
+                checkCudaErrors(result = cuMemAllocHost((void **)&g_pFrameYUV[1], (nDecodedPitch * nHeight + nDecodedPitch*nHeight/2)));
+                checkCudaErrors(result = cuMemAllocHost((void **)&g_pFrameYUV[2], (nDecodedPitch * nHeight + nDecodedPitch*nHeight/2)));
+                checkCudaErrors(result = cuMemAllocHost((void **)&g_pFrameYUV[3], (nDecodedPitch * nHeight + nDecodedPitch*nHeight/2)));
+                checkCudaErrors(result = cuMemAllocHost((void **)&g_pFrameYUV[4], (nDecodedPitch * nHeight + nDecodedPitch*nHeight / 2)));
+                checkCudaErrors(result = cuMemAllocHost((void **)&g_pFrameYUV[5], (nDecodedPitch * nHeight + nDecodedPitch*nHeight / 2)));
 
                 g_bFirstFrame = false;
 
@@ -1178,7 +1313,7 @@ bool copyDecodedFrameToTexture(unsigned int &nRepeats, int bUseInterop, int *pbI
             // If streams are enabled, we can perform the readback to the host while the kernel is executing
             if (g_bReadback && g_ReadbackSID)
             {
-                CUresult result = cuMemcpyDtoHAsync(g_bFrameData[active_field], pDecodedFrame[active_field], (nDecodedPitch * nHeight * 3 / 2), g_ReadbackSID);
+                CUresult result = cuMemcpyDtoHAsync(g_pFrameYUV[active_field], pDecodedFrame[active_field], (nDecodedPitch * nHeight * 3 / 2), g_ReadbackSID);
 
                 if (result != CUDA_SUCCESS)
                 {
@@ -1196,20 +1331,20 @@ bool copyDecodedFrameToTexture(unsigned int &nRepeats, int bUseInterop, int *pbI
             if (g_pImageGL)
             {
                 // map the texture surface
-                g_pImageGL->map(&pInteropFrame[active_field], &pFramePitch, active_field);
-                pFramePitch = g_nWindowWidth * 4;
+                g_pImageGL->map(&pInteropFrame[active_field], &nTexturePitch, active_field);
+                nTexturePitch /= g_pVideoDecoder->targetHeight();
             }
             else
             {
                 pInteropFrame[active_field] = g_pInteropFrame[active_field];
-                pFramePitch = g_pVideoDecoder->targetWidth() * 2;
+                nTexturePitch = g_pVideoDecoder->targetWidth() * 2;
             }
 
             // perform post processing on the CUDA surface (performs colors space conversion and post processing)
             // comment this out if we inclue the line of code seen above
 
             cudaPostProcessFrame(&pDecodedFrame[active_field], nDecodedPitch, &pInteropFrame[active_field],
-                                 pFramePitch, g_pCudaModule->getModule(), g_kernelNV12toARGB, g_KernelSID);
+                                 nTexturePitch, g_pCudaModule->getModule(), g_kernelNV12toARGB, g_KernelSID);
 
             if (g_pImageGL)
             {
@@ -1220,14 +1355,21 @@ bool copyDecodedFrameToTexture(unsigned int &nRepeats, int bUseInterop, int *pbI
             // unmap video frame
             // unmapFrame() synchronizes with the VideoDecode API (ensures the frame has finished decoding)
             g_pVideoDecoder->unmapFrame(pDecodedFrame[active_field]);
-            // release the frame, so it can be re-used in decoder
-            g_pFrameQueue->releaseFrame(&oDisplayInfo);
-
             g_DecodeFrameCount++;
+
+            if (g_bWriteFile)
+            {
+                checkCudaErrors(cuStreamSynchronize(g_ReadbackSID));
+                SaveFrameAsYUV(g_pFrameYUV[active_field + 3],
+                    g_pFrameYUV[active_field],
+                    nWidth, nHeight, nDecodedPitch);
+            }
         }
 
         // Detach from the Current thread
         checkCudaErrors(cuCtxPopCurrent(NULL));
+        // release the frame, so it can be re-used in decoder
+        g_pFrameQueue->releaseFrame(&oDisplayInfo);         
     }
     else
     {
@@ -1237,10 +1379,28 @@ bool copyDecodedFrameToTexture(unsigned int &nRepeats, int bUseInterop, int *pbI
 
     // check if decoding has come to an end.
     // if yes, signal the app to shut down.
-    if (g_pFrameQueue->isDecodeFinished())
+    if (!g_pVideoSource->isStarted() && g_pFrameQueue->isEndOfDecode() && g_pFrameQueue->isEmpty())
     {
+        // Let's free the Frame Data
+        if (g_ReadbackSID)
+        {
+            cuMemFreeHost((void *)g_pFrameYUV[0]);
+            cuMemFreeHost((void *)g_pFrameYUV[1]);
+            cuMemFreeHost((void *)g_pFrameYUV[2]);
+            cuMemFreeHost((void *)g_pFrameYUV[3]);
+            cuMemFreeHost((void *)g_pFrameYUV[4]);
+            cuMemFreeHost((void *)g_pFrameYUV[5]);
+
+            g_pFrameYUV[0] = NULL;
+            g_pFrameYUV[1] = NULL;
+            g_pFrameYUV[2] = NULL;
+            g_pFrameYUV[3] = NULL;
+            g_pFrameYUV[4] = NULL;
+            g_pFrameYUV[5] = NULL;
+        }
+
         // Let's just stop, and allow the user to quit, so they can at least see the results
-        //g_pVideoSource->stop();
+        g_pVideoSource->stop();
 
         // If we want to loop reload the video file and restart
         if (g_bLoop && !g_bAutoQuit)
@@ -1263,7 +1423,7 @@ bool copyDecodedFrameToTexture(unsigned int &nRepeats, int bUseInterop, int *pbI
 // This is the CUDA stage for Video Post Processing.  Last stage takes care of the NV12 to ARGB
 void
 cudaPostProcessFrame(CUdeviceptr *ppDecodedFrame, size_t nDecodedPitch,
-                     CUdeviceptr *ppInteropFrame, size_t pFramePitch,
+                     CUdeviceptr *ppTextureData,  size_t nTexturePitch,
                      CUmodule cuModNV12toARGB,
                      CUfunction fpCudaKernel, CUstream streamID)
 {
@@ -1287,9 +1447,8 @@ cudaPostProcessFrame(CUdeviceptr *ppDecodedFrame, size_t nDecodedPitch,
     // TODO: Stage for handling video post processing
 
     // Final Stage: NV12toARGB color space conversion
-    CUresult eResult;
-    eResult = cudaLaunchNV12toARGBDrv(*ppDecodedFrame, nDecodedPitch,
-                                      *ppInteropFrame, pFramePitch,
+    cudaLaunchNV12toARGBDrv(*ppDecodedFrame, nDecodedPitch,
+                                      *ppTextureData, nTexturePitch,
                                       nWidth, nHeight, fpCudaKernel, streamID);
 }
 
@@ -1308,12 +1467,19 @@ bool drawScene(int field_num)
     return hr;
 }
 
-// Release all previously initialized objects
+// Release all previously initd objects
 bool cleanup(bool bDestroyContext)
 {
+    if (fpWriteYUV != NULL)
+    {
+        fflush(fpWriteYUV);
+        fclose(fpWriteYUV);
+        fpWriteYUV = NULL;
+    }
+
     if (bDestroyContext)
     {
-        // Attach the CUDA Context (so we may properly free memory)
+        // Attach the CUDA Context (so we may properly free memroy)
         checkCudaErrors(cuCtxPushCurrent(g_oContext));
 
         if (g_pInteropFrame[0])
@@ -1326,20 +1492,9 @@ bool cleanup(bool bDestroyContext)
             checkCudaErrors(cuMemFree(g_pInteropFrame[1]));
         }
 
-        // Let's free the Frame Data used during readback
-        if (g_bReadback)
+        if (g_pInteropFrame[2])
         {
-            if (g_bFrameData[0])
-            {
-                checkCudaErrors(cuMemFreeHost((void *)g_bFrameData[0]));
-                g_bFrameData[0] = NULL;
-            }
-
-            if (g_bFrameData[1])
-            {
-                checkCudaErrors(cuMemFreeHost((void *)g_bFrameData[1]));
-                g_bFrameData[1] = NULL;
-            }
+            checkCudaErrors(cuMemFree(g_pInteropFrame[2]));
         }
 
         // Detach from the Current thread
@@ -1358,8 +1513,7 @@ bool cleanup(bool bDestroyContext)
 }
 
 // Launches the CUDA kernels to fill in the texture data
-// returns true if it's the end of the decode and false otherwise
-bool renderVideoFrame(int bUseInterop)
+void renderVideoFrame(int bUseInterop)
 {
     static unsigned int nRepeatFrame = 0;
     int repeatFactor = g_iRepeatFactor;
@@ -1376,30 +1530,17 @@ bool renderVideoFrame(int bUseInterop)
     }
     else
     {
-        return true;
+        return;
     }
 
     if (bFramesDecoded)
     {
-        g_FrameCount ++;
-
         while (repeatFactor-- > 0)
         {
             if (g_bUseDisplay && bUseInterop)
             {
-                // We will always draw field/frame 0
-                drawScene(0);
-                glutSwapBuffers();
-
-                if (!repeatFactor)
-                {
-                    computeFPS(bUseInterop);
-                }
-
-                // If interlaced mode, then we will need to draw field 1 separately
-                if (!bIsProgressive)
-                {
-                    drawScene(1);
+                for (int i = 0; i < nRepeatFrame; i++) {
+                    drawScene(i);
                     glutSwapBuffers();
 
                     if (!repeatFactor)
@@ -1432,12 +1573,5 @@ bool renderVideoFrame(int bUseInterop)
             g_bRunning = false;
         }
     }
-
-    if (g_pFrameQueue->isDecodeFinished())
-    {
-        return true; //quit
-    }
-
-    return false;
 }
 

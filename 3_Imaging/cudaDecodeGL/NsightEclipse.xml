@@ -2,6 +2,12 @@
 <!DOCTYPE entry SYSTEM "SamplesInfo.dtd">
 <entry>
   <name>cudaDecodeGL</name>
+  <additional_preprocessor>
+    <preprocessor>INIT_CUDA_GL</preprocessor>
+  </additional_preprocessor>
+  <cflags>
+    <flag>-DINIT_CUDA_GL</flag>
+  </cflags>
   <cuda_api_list>
     <driver>cuDeviceGet</driver>
     <driver>cuDeviceGetAttribute</driver>
@@ -78,6 +84,7 @@
     <library>nvcuvid</library>
     <library os="linux">cuda</library>
     <library framework="true" os="macosx">CUDA</library>
+    <library>GLEW</library>
     <library>GLU</library>
     <library>GL</library>
     <library framework="true" os="macosx">GLUT</library>
@@ -86,6 +93,7 @@
     <library os="linux">X11</library>
   </libraries>
   <librarypaths>
+    <path>../../common/lib/linux/x86_64</path>
     <path arch="x86_64" os="linux">../../common/lib/linux/x86_64</path>
     <path arch="armv7l" os="linux">../../common/lib/linux/armv7l</path>
     <path os="macosx">../../common/lib/darwin</path>
@@ -105,13 +113,13 @@
     <scope>2:Video Codecs</scope>
     <scope>2:Computer Vision</scope>
   </scopes>
-  <sm-arch>sm20</sm-arch>
   <sm-arch>sm30</sm-arch>
   <sm-arch>sm35</sm-arch>
   <sm-arch>sm37</sm-arch>
   <sm-arch>sm50</sm-arch>
   <sm-arch>sm52</sm-arch>
   <sm-arch>sm60</sm-arch>
+  <sm-arch>sm70</sm-arch>
   <sources>
     <extranone>data\plush1_720p_10s.m2v</extranone>
   </sources>
@@ -129,5 +137,5 @@
   </supported_sm_architectures>
   <title>CUDA Video Decoder GL API</title>
   <type>exe</type>
-  <whitepaper>doc\nvcuvid.pdf</whitepaper>
+  <whitepaper>doc\CUDA_Video_Decoder.pdf</whitepaper>
 </entry>

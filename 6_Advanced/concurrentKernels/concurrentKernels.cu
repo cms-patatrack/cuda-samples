@@ -11,13 +11,15 @@
 
 //
 // This sample demonstrates the use of streams for concurrent execution. It also illustrates how to
-// introduce dependencies between CUDA streams with the new cudaStreamWaitEvent function introduced
-// in CUDA 3.2.
+// introduce dependencies between CUDA streams with the cudaStreamWaitEvent function.
 //
-// Devices of compute capability 1.x will run the kernels one after another
+
 // Devices of compute capability 2.0 or higher can overlap the kernels
 //
 #include <stdio.h>
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
 #include <helper_functions.h>
 #include <helper_cuda.h>
 
@@ -52,6 +54,8 @@ __global__ void clock_block(clock_t *d_o, clock_t clock_count)
 // Single warp reduction kernel
 __global__ void sum(clock_t *d_clocks, int N)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     __shared__ clock_t s_clocks[32];
 
     clock_t my_sum = 0;
@@ -62,7 +66,7 @@ __global__ void sum(clock_t *d_clocks, int N)
     }
 
     s_clocks[threadIdx.x] = my_sum;
-    syncthreads();
+    cg::sync(cta);
 
     for (int i=16; i>0; i/=2)
     {
@@ -71,7 +75,7 @@ __global__ void sum(clock_t *d_clocks, int N)
             s_clocks[threadIdx.x] += s_clocks[threadIdx.x + i];
         }
 
-        syncthreads();
+        cg::sync(cta);
     }
 
     d_clocks[0] = s_clocks[0];

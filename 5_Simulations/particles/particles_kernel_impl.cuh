@@ -18,6 +18,9 @@
 
 #include <stdio.h>
 #include <math.h>
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
 #include "helper_math.h"
 #include "math_constants.h"
 #include "particles_kernel.cuh"
@@ -159,6 +162,8 @@ void reorderDataAndFindCellStartD(uint   *cellStart,        // output: cell star
                                   float4 *oldVel,           // input: sorted velocity array
                                   uint    numParticles)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     extern __shared__ uint sharedHash[];    // blockSize + 1 elements
     uint index = __umul24(blockIdx.x,blockDim.x) + threadIdx.x;
 
@@ -181,7 +186,7 @@ void reorderDataAndFindCellStartD(uint   *cellStart,        // output: cell star
         }
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     if (index < numParticles)
     {

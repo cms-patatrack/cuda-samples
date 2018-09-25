@@ -16,6 +16,10 @@
 #ifndef _BISECT_KERNEL_LARGE_ONEI_H_
 #define _BISECT_KERNEL_LARGE_ONEI_H_
 
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
+
 // includes, project
 #include "config.h"
 #include "util.h"
@@ -45,6 +49,8 @@ bisectKernelLarge_OneIntervals(float *g_d, float *g_s, const unsigned int n,
                                unsigned int *g_pos,
                                float  precision)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     const unsigned int gtid = (blockDim.x * blockIdx.x) + threadIdx.x;
 
     __shared__  float  s_left_scratch[MAX_THREADS_BLOCK];
@@ -81,14 +87,14 @@ bisectKernelLarge_OneIntervals(float *g_d, float *g_s, const unsigned int n,
         converged_all_threads = 0;
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     // process until all threads converged to an eigenvalue
     // while( 0 == converged_all_threads) {
     while (true)
     {
 
-        converged_all_threads = 1;
+        atomicExch(&converged_all_threads, 1);
 
         // update midpoint for all active threads
         if ((gtid < num_intervals) && (0 == converged))
@@ -102,9 +108,9 @@ bisectKernelLarge_OneIntervals(float *g_d, float *g_s, const unsigned int n,
                                                     mid, gtid, num_intervals,
                                                     s_left_scratch,
                                                     s_right_scratch,
-                                                    converged);
+                                                    converged, cta);
 
-        __syncthreads();
+        cg::sync(cta);
 
         // for all active threads
         if ((gtid < num_intervals) && (0 == converged))
@@ -135,22 +141,22 @@ bisectKernelLarge_OneIntervals(float *g_d, float *g_s, const unsigned int n,
             }
             else
             {
-                converged_all_threads = 0;
+                atomicExch(&converged_all_threads, 0);
             }
         }
 
-        __syncthreads();
+        cg::sync(cta);
 
         if (1 == converged_all_threads)
         {
             break;
         }
 
-        __syncthreads();
+        cg::sync(cta);
     }
 
     // write data back to global memory
-    __syncthreads();
+    cg::sync(cta);
 
     if (gtid < num_intervals)
     {

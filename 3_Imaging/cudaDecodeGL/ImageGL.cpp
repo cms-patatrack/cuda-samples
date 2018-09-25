@@ -1,5 +1,5 @@
 /*
- * Copyright 1993-2015 NVIDIA Corporation.  All rights reserved.
+ * Copyright 1993-2017 NVIDIA Corporation.  All rights reserved.
  *
  * Please refer to the NVIDIA end user license agreement (EULA) associated
  * with this source code for terms and conditions that govern your use of
@@ -11,8 +11,8 @@
 
 #include "ImageGL.h"
 
-#include <cuda.h>
-#include <cudaGL.h>
+#include "dynlink_cuda.h"   // <cuda.h>
+#include "dynlink_cudaGL.h" // <cudaGL.h>
 
 #include <cassert>
 
@@ -43,17 +43,17 @@ ImageGL::ImageGL(unsigned int nDispWidth,
                  unsigned int nDispHeight,
                  unsigned int nTexWidth,
                  unsigned int nTexHeight,
-                 bool bIsProgressive,
+                 bool bVsync, 
                  PixelFormat ePixelFormat)
     : nWidth_(nDispWidth)
     , nHeight_(nDispHeight)
     , nTexWidth_(nTexWidth)
     , nTexHeight_(nTexHeight)
     , e_PixFmt_(ePixelFormat)
-    , bIsProgressive_(bIsProgressive)
+    , bVsync_(bVsync) 
     , bIsCudaResource_(false)
 {
-    int nFrames = bIsProgressive_ ? 1 : 2;
+    int nFrames = bVsync_ ? 3 : 1;
 
     glGenBuffers(nFrames, gl_pbo_);
 
@@ -77,7 +77,7 @@ ImageGL::ImageGL(unsigned int nDispWidth,
 
 ImageGL::~ImageGL()
 {
-    int nFrames = bIsProgressive_ ? 1 : 2;
+    int nFrames = bVsync_ ? 3 : 1;
 
     for (int n=0; n < nFrames; n++)
     {
@@ -101,15 +101,16 @@ ImageGL::registerAsCudaResource(int field_num)
 void
 ImageGL::unregisterAsCudaResource(int field_num)
 {
-    CUresult result = cuCtxPushCurrent(oContext_);
+    cuCtxPushCurrent(oContext_);
     checkCudaErrors(cuGLUnregisterBufferObject(gl_pbo_[field_num]));
     bIsCudaResource_ = false;
+    cuCtxPopCurrent(NULL);
 }
 
 void
 ImageGL::setTextureFilterMode(GLuint nMINfilter, GLuint nMAGfilter)
 {
-    int nFrames = bIsProgressive_ ? 1 : 2;
+    int nFrames = bVsync_ ? 3 : 1;
 
     printf("setTextureFilterMode(%s,%s)\n",
            (nMINfilter == GL_NEAREST) ? "GL_NEAREST" : "GL_LINEAR",
@@ -165,7 +166,7 @@ ImageGL::clear(unsigned char nClearColor)
     // Can only be cleared if surface is a CUDA resource
     assert(bIsCudaResource_);
 
-    int nFrames = bIsProgressive_ ? 1 : 2;
+    int nFrames = bVsync_ ? 3 : 1;
     size_t       imagePitch;
     CUdeviceptr  pImageData;
 

@@ -120,33 +120,14 @@ main(int argc, char **argv)
     }
 
     cudaDeviceProp deviceProp;
-    deviceProp.major = 1;
-    deviceProp.minor = 0;
-    int minimumComputeVersion = 10;
-
-    if (datatype == REDUCE_DOUBLE)
-    {
-        deviceProp.minor = 3;
-        minimumComputeVersion = 13;
-    }
-
     int dev;
 
     dev = findCudaDevice(argc, (const char **)argv);
 
     checkCudaErrors(cudaGetDeviceProperties(&deviceProp, dev));
 
-    if ((deviceProp.major * 10 + deviceProp.minor) >= minimumComputeVersion)
-    {
-        printf("Using Device %d: %s\n\n", dev, deviceProp.name);
-        checkCudaErrors(cudaSetDevice(dev));
-    }
-    else
-    {
-        printf("Error: the selected device does not support the minimum compute capability of %d.%d.\n\n",
-               minimumComputeVersion / 10, minimumComputeVersion % 10);
-        exit(EXIT_FAILURE);
-    }
+    printf("Using Device %d: %s\n\n", dev, deviceProp.name);
+    checkCudaErrors(cudaSetDevice(dev));
 
     printf("Reducing array of type %s\n\n", getReduceTypeString(datatype));
 

@@ -23,6 +23,10 @@
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
 
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
+
 #include "bodysystem.h"
 
 __constant__ float softeningSquared;
@@ -142,7 +146,7 @@ template <typename T>
 __device__ typename vec3<T>::Type
 computeBodyAccel(typename vec4<T>::Type bodyPos,
                  typename vec4<T>::Type *positions,
-                 int numTiles)
+                 int numTiles, cg::thread_block cta)
 {
     typename vec4<T>::Type *sharedPos = SharedMemory<typename vec4<T>::Type>();
 
@@ -152,7 +156,7 @@ computeBodyAccel(typename vec4<T>::Type bodyPos,
     {
         sharedPos[threadIdx.x] = positions[tile * blockDim.x + threadIdx.x];
 
-        __syncthreads();
+        cg::sync(cta);
 
         // This is the "tile_calculation" from the GPUG3 article.
 #pragma unroll 128
@@ -162,7 +166,7 @@ computeBodyAccel(typename vec4<T>::Type bodyPos,
             acc = bodyBodyInteraction<T>(acc, bodyPos, sharedPos[counter]);
         }
 
-        __syncthreads();
+        cg::sync(cta);
     }
 
     return acc;
@@ -176,6 +180,8 @@ integrateBodies(typename vec4<T>::Type *__restrict__ newPos,
                 unsigned int deviceOffset, unsigned int deviceNumBodies,
                 float deltaTime, float damping, int numTiles)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     int index = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (index >= deviceNumBodies)
@@ -187,7 +193,7 @@ integrateBodies(typename vec4<T>::Type *__restrict__ newPos,
 
     typename vec3<T>::Type accel = computeBodyAccel<T>(position,
                                                        oldPos,
-                                                       numTiles);
+                                                       numTiles, cta);
 
     // acceleration = force / mass;
     // new velocity = old velocity + acceleration * deltaTime

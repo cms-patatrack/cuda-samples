@@ -26,6 +26,9 @@
 
 #pragma once
 
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
 #include "Common.h"
 
 
@@ -440,6 +443,8 @@ __device__ void CUDAshortInplaceIDCT(unsigned int *V8)
 
 __global__ void CUDAkernelShortDCT(short *SrcDst, int ImgStride)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     __shared__ short block[KERS_BLOCK_HEIGHT * KERS_SMEMBLOCK_STRIDE];
     int OffsThreadInRow = FMUL(threadIdx.y, BLOCK_SIZE) + threadIdx.x;
     int OffsThreadInCol = FMUL(threadIdx.z, BLOCK_SIZE);
@@ -457,11 +462,11 @@ __global__ void CUDAkernelShortDCT(short *SrcDst, int ImgStride)
             ((int *)bl_ptr)[i * (KERS_SMEMBLOCK_STRIDE / 2)] = ((int *)SrcDst)[i * (ImgStride / 2)];
     }
 
-    __syncthreads();
+    cg::sync(cta);
     CUDAshortInplaceDCT(block + OffsThreadInCol * KERS_SMEMBLOCK_STRIDE + OffsThrRowPermuted, KERS_SMEMBLOCK_STRIDE);
-    __syncthreads();
+    cg::sync(cta);
     CUDAshortInplaceDCT((unsigned int *)(block + OffsThreadInRow * KERS_SMEMBLOCK_STRIDE + OffsThreadInCol));
-    __syncthreads();
+    cg::sync(cta);
 
     //store data to global memory (only first half of threads in each row performs data moving (each thread moves 2 shorts)
     if (OffsThreadInRow < KERS_BLOCK_WIDTH_HALF)
@@ -490,6 +495,8 @@ __global__ void CUDAkernelShortDCT(short *SrcDst, int ImgStride)
 
 __global__ void CUDAkernelShortIDCT(short *SrcDst, int ImgStride)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     __shared__ short block[KERS_BLOCK_HEIGHT * KERS_SMEMBLOCK_STRIDE];
 
     int    OffsThreadInRow = IMAD(threadIdx.y, BLOCK_SIZE, threadIdx.x);
@@ -508,11 +515,11 @@ __global__ void CUDAkernelShortIDCT(short *SrcDst, int ImgStride)
             ((int *)bl_ptr)[i * (KERS_SMEMBLOCK_STRIDE / 2)] = ((int *)SrcDst)[i * (ImgStride / 2)];
     }
 
-    __syncthreads();
+    cg::sync(cta);
     CUDAshortInplaceIDCT(block + OffsThreadInCol * KERS_SMEMBLOCK_STRIDE + OffsThrRowPermuted, KERS_SMEMBLOCK_STRIDE);
-    __syncthreads();
+    cg::sync(cta);
     CUDAshortInplaceIDCT((unsigned int *)(block + OffsThreadInRow * KERS_SMEMBLOCK_STRIDE + OffsThreadInCol));
-    __syncthreads();
+    cg::sync(cta);
 
     //store data to global memory (only first half of threads in each row performs data moving (each thread moves 2 shorts)
     if (OffsThreadInRow < KERS_BLOCK_WIDTH_HALF)

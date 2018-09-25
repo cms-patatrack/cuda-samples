@@ -145,7 +145,7 @@ bool leftClicked = false;
 bool middleClicked = false;
 bool rightClicked = false;
 
-bool haveDoubles = false;
+bool haveDoubles = true;
 int numSMs = 0;          // number of multiprocessors
 int version = 1;             // Compute Capability
 
@@ -943,12 +943,6 @@ void initOpenGLBuffers(int w, int h)
         gl_PBO = 0;
     }
 
-    // check for minimized window
-    if ((w==0) && (h==0))
-    {
-        return;
-    }
-
     // allocate new buffers
     h_Src = (uchar4 *)malloc(w * h * 4);
 
@@ -993,10 +987,14 @@ void reshapeFunc(int w, int h)
     glLoadIdentity();
     glOrtho(0.0, 1.0, 0.0, 1.0, 0.0, 1.0);
 
-    initOpenGLBuffers(w, h);
+    if (w!=0 && h!=0)  // Do not call when window is minimized that is when width && height == 0
+        initOpenGLBuffers(w, h);
+
     imageW = w;
     imageH = h;
     pass = 0;
+
+    glutPostRedisplay();
 }
 
 void initGL(int *argc, char **argv)
@@ -1041,13 +1039,6 @@ void initData(int argc, char **argv)
     checkCudaErrors(cudaGetDeviceProperties(&deviceProp, dev));
     version = deviceProp.major*10 + deviceProp.minor;
 
-    if (version < 11)
-    {
-        printf("GPU compute capability is too low (1.0), program is waived\n");
-        exit(EXIT_WAIVED);
-    }
-
-    haveDoubles = (version >= 13);
     numSMs = deviceProp.multiProcessorCount;
 
     // initialize some of the arguments
@@ -1286,12 +1277,6 @@ int main(int argc, char **argv)
         // use command-line specified CUDA device, otherwise use device with highest Gflops/s
         findCudaDevice(argc, (const char **)argv); // no OpenGL usage
 
-        // If the GPU does not meet SM1.1 capabilities, we will quit
-        if (!checkCudaCapabilities(1,1))
-        {
-            exit(EXIT_SUCCESS);
-        }
-
         // We run the Automated Testing code path
         runSingleTest(argc, argv);
 
@@ -1302,12 +1287,6 @@ int main(int argc, char **argv)
         //run benchmark
         // use command-line specified CUDA device, otherwise use device with highest Gflops/s
         chooseCudaDevice(argc, (const char **)argv, false); // no OpenGL usage
-
-        // If the GPU does not meet a minimum of SM1.1 capabilities, we will quit
-        if (!checkCudaCapabilities(1,1))
-        {
-            exit(EXIT_SUCCESS);
-        }
 
         // We run the Automated Performance Test
         runBenchmark(argc, argv);
@@ -1327,12 +1306,6 @@ int main(int argc, char **argv)
 
     // use command-line specified CUDA device, otherwise use device with highest Gflops/s
     chooseCudaDevice(argc, (const char **)argv, true); // yes to OpenGL usage
-
-    // If the GPU does not meet SM1.1 capabilities, we quit
-    if (!checkCudaCapabilities(1,1))
-    {
-        exit(EXIT_SUCCESS);
-    }
 
     // Otherwise it succeeds, we will continue to run this sample
     initData(argc, argv);

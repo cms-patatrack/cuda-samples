@@ -182,6 +182,29 @@ ifneq ($(TARGET_ARCH),$(HOST_ARCH))
     endif
 endif
 
+ifeq ($(TARGET_OS),qnx)
+    CCFLAGS += -DWIN_INTERFACE_CUSTOM
+    LDFLAGS += -lsocket
+endif
+
+# Install directory of different arch
+CUDA_INSTALL_TARGET_DIR :=
+ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-linux)
+    CUDA_INSTALL_TARGET_DIR = targets/armv7-linux-gnueabihf/
+else ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-linux)
+    CUDA_INSTALL_TARGET_DIR = targets/aarch64-linux/
+else ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-android)
+    CUDA_INSTALL_TARGET_DIR = targets/armv7-linux-androideabi/
+else ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-android)
+    CUDA_INSTALL_TARGET_DIR = targets/aarch64-linux-androideabi/
+else ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-qnx)
+    CUDA_INSTALL_TARGET_DIR = targets/ARMv7-linux-QNX/
+else ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-qnx)
+    CUDA_INSTALL_TARGET_DIR = targets/aarch64-qnx/
+else ifeq ($(TARGET_ARCH),ppc64le)
+    CUDA_INSTALL_TARGET_DIR = targets/ppc64le-linux/
+endif
+
 # Debug build flags
 ifeq ($(dbg),1)
       NVCCFLAGS += -g -G
@@ -210,7 +233,7 @@ LIBRARIES :=
 ################################################################################
 
 # Gencode arguments
-SMS ?= 35 37 50 52 60
+SMS ?= 35 37 50 52 60 70
 
 ifeq ($(SMS),)
 $(info >>> WARNING - no SM architectures have been specified - waiving sample <<<)

@@ -17,6 +17,9 @@
 #define _REDUCE_KERNEL_H_
 
 #include <device_functions.h>
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
 
 /*
     Parallel sum reduction using shared memory
@@ -33,79 +36,45 @@
 
 template <unsigned int blockSize>
 __device__ void
-reduceBlock(volatile float *sdata, float mySum, const unsigned int tid)
+reduceBlock(volatile float *sdata, float mySum, const unsigned int tid, cg::thread_block cta)
 {
+    cg::thread_block_tile<32> tile32 = cg::tiled_partition<32>(cta);
     sdata[tid] = mySum;
-    __syncthreads();
+    cg::sync(tile32);
 
-    // do reduction in shared mem
-    if (blockSize >= 512)
+    const int VEC = 32;
+    const int vid = tid & (VEC-1);
+
+    float beta  = mySum;
+    float temp;
+
+    for (int i = VEC/2; i > 0; i>>=1)
     {
-        if (tid < 256)
+        if (vid < i)
         {
-            sdata[tid] = mySum = mySum + sdata[tid + 256];
+            temp      = sdata[tid+i];
+            beta     += temp;
+            sdata[tid]  = beta;
         }
-
-        __syncthreads();
+        cg::sync(tile32);
     }
+    cg::sync(cta);
 
-    if (blockSize >= 256)
+    if (cta.thread_rank() == 0) 
     {
-        if (tid < 128)
+        beta  = 0;
+        for (int i = 0; i < blockDim.x; i += VEC) 
         {
-            sdata[tid] = mySum = mySum + sdata[tid + 128];
+            beta  += sdata[i];
         }
-
-        __syncthreads();
+        sdata[0] = beta;
     }
-
-    if (blockSize >= 128)
-    {
-        if (tid <  64)
-        {
-            sdata[tid] = mySum = mySum + sdata[tid +  64];
-        }
-
-        __syncthreads();
-    }
-
-    if (tid < 32)
-    {
-        if (blockSize >=  64)
-        {
-            sdata[tid] = mySum = mySum + sdata[tid + 32];
-        }
-
-        if (blockSize >=  32)
-        {
-            sdata[tid] = mySum = mySum + sdata[tid + 16];
-        }
-
-        if (blockSize >=  16)
-        {
-            sdata[tid] = mySum = mySum + sdata[tid +  8];
-        }
-
-        if (blockSize >=   8)
-        {
-            sdata[tid] = mySum = mySum + sdata[tid +  4];
-        }
-
-        if (blockSize >=   4)
-        {
-            sdata[tid] = mySum = mySum + sdata[tid +  2];
-        }
-
-        if (blockSize >=   2)
-        {
-            sdata[tid] = mySum = mySum + sdata[tid +  1];
-        }
-    }
+    cg::sync(cta);
 }
 
 template <unsigned int blockSize, bool nIsPow2>
 __device__ void
-reduceBlocks(const float *g_idata, float *g_odata, unsigned int n)
+reduceBlocks(const float *g_idata, float *g_odata, unsigned int n, cg::thread_block cta)
 {
     extern __shared__ float sdata[];
 
@@ -131,7 +100,7 @@ reduceBlocks(const float *g_idata, float *g_odata, unsigned int n)
     }
 
     // do reduction in shared mem
-    reduceBlock<blockSize>(sdata, mySum, tid);
+    reduceBlock<blockSize>(sdata, mySum, tid, cta);
 
     // write result for this block to global mem
     if (tid == 0) g_odata[blockIdx.x] = sdata[0];
@@ -142,7 +111,9 @@ template <unsigned int blockSize, bool nIsPow2>
 __global__ void
 reduceMultiPass(const float *g_idata, float *g_odata, unsigned int n)
 {
-    reduceBlocks<blockSize, nIsPow2>(g_idata, g_odata, n);
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
+    reduceBlocks<blockSize, nIsPow2>(g_idata, g_odata, n, cta);
 }
 
 // Global variable used by reduceSinglePass to count how many blocks have finished
@@ -171,12 +142,13 @@ cudaError_t setRetirementCount(int retCnt)
 template <unsigned int blockSize, bool nIsPow2>
 __global__ void reduceSinglePass(const float *g_idata, float *g_odata, unsigned int n)
 {
-
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     //
     // PHASE 1: Process all inputs assigned to this block
     //
 
-    reduceBlocks<blockSize, nIsPow2>(g_idata, g_odata, n);
+    reduceBlocks<blockSize, nIsPow2>(g_idata, g_odata, n, cta);
 
     //
     // PHASE 2: Last block finished will process all partial sums
@@ -199,7 +171,7 @@ __global__ void reduceSinglePass(const float *g_idata, float *g_odata, unsigned 
             amLast = (ticket == gridDim.x-1);
         }
 
-        __syncthreads();
+        cg::sync(cta);
 
         // The last block sums the results of all other blocks
         if (amLast)
@@ -213,7 +185,7 @@ __global__ void reduceSinglePass(const float *g_idata, float *g_odata, unsigned 
                 i += blockSize;
             }
 
-            reduceBlock<blockSize>(smem, mySum, tid);
+            reduceBlock<blockSize>(smem, mySum, tid, cta);
 
             if (tid==0)
             {

@@ -25,7 +25,8 @@ __global__ void VoteAnyKernel1(unsigned int *input, unsigned int *result, int si
 {
     int tx = threadIdx.x;
 
-    result[tx] = any(input[tx]);
+    int mask = 0xffffffff;
+    result[tx] = __any_sync(mask, input[tx]);
 }
 
 // Kernel #2 tests the across-the-warp vote(all) intrinsic.
@@ -35,7 +36,8 @@ __global__ void VoteAllKernel2(unsigned int *input, unsigned int *result, int si
 {
     int tx = threadIdx.x;
 
-    result[tx] = all(input[tx]);
+    int mask = 0xffffffff;
+    result[tx] = __all_sync(mask, input[tx]);
 }
 
 // Kernel #3 is a directed test for the across-the-warp vote(all) intrinsic.
@@ -43,10 +45,11 @@ __global__ void VoteAllKernel2(unsigned int *input, unsigned int *result, int si
 __global__ void VoteAnyKernel3(bool *info, int warp_size)
 {
     int tx = threadIdx.x;
+    unsigned int mask = 0xffffffff;
     bool *offs = info + (tx * 3);
 
     // The following should hold true for the second and third warp
-    *offs = any((tx >= (warp_size * 3) / 2));
+    *offs = __any_sync(mask, (tx >= (warp_size * 3) / 2));
     // The following should hold true for the "upper half" of the second warp,
     // and all of the third warp
     *(offs + 1) = (tx >= (warp_size * 3) / 2? true: false);

@@ -84,11 +84,17 @@
 */
 
 #define DLASWP_BLOCK_SIZE 256
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
 
 // based on swap_rows - in just folds in the loop from the cpu,
 // so there is no going in and out of the gpu
 __global__ void dlaswp(int n, double *A, int lda, int *ipiv, int k1, int k2)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
+
     for (; k1 < k2 ; ++k1)
     {
         int src_row = k1;
@@ -100,7 +106,7 @@ __global__ void dlaswp(int n, double *A, int lda, int *ipiv, int k1, int k2)
             A[col_id*lda + src_row] = A[col_id*lda + dst_row];
             A[col_id*lda + dst_row] = A_tmp;
 
-            __syncthreads();
+            cg::sync(cta);
         }
 
         // TODO: we have very poor coalescing here. Can't we do better? Launch one warp of threads per column and

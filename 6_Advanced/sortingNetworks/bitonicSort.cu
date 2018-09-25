@@ -16,6 +16,9 @@
 
 
 #include <assert.h>
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
 #include <helper_cuda.h>
 #include "sortingNetworks_common.h"
 #include "sortingNetworks_common.cuh"
@@ -34,6 +37,8 @@ __global__ void bitonicSortShared(
     uint dir
 )
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     //Shared memory storage for one or more short vectors
     __shared__ uint s_key[SHARED_SIZE_LIMIT];
     __shared__ uint s_val[SHARED_SIZE_LIMIT];
@@ -55,7 +60,7 @@ __global__ void bitonicSortShared(
 
         for (uint stride = size / 2; stride > 0; stride >>= 1)
         {
-            __syncthreads();
+            cg::sync(cta);
             uint pos = 2 * threadIdx.x - (threadIdx.x & (stride - 1));
             Comparator(
                 s_key[pos +      0], s_val[pos +      0],
@@ -69,7 +74,7 @@ __global__ void bitonicSortShared(
     {
         for (uint stride = arrayLength / 2; stride > 0; stride >>= 1)
         {
-            __syncthreads();
+            cg::sync(cta);
             uint pos = 2 * threadIdx.x - (threadIdx.x & (stride - 1));
             Comparator(
                 s_key[pos +      0], s_val[pos +      0],
@@ -79,7 +84,7 @@ __global__ void bitonicSortShared(
         }
     }
 
-    __syncthreads();
+    cg::sync(cta);
     d_DstKey[                      0] = s_key[threadIdx.x +                       0];
     d_DstVal[                      0] = s_val[threadIdx.x +                       0];
     d_DstKey[(SHARED_SIZE_LIMIT / 2)] = s_key[threadIdx.x + (SHARED_SIZE_LIMIT / 2)];
@@ -103,6 +108,8 @@ __global__ void bitonicSortShared1(
     uint *d_SrcVal
 )
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     //Shared memory storage for current subarray
     __shared__ uint s_key[SHARED_SIZE_LIMIT];
     __shared__ uint s_val[SHARED_SIZE_LIMIT];
@@ -124,7 +131,7 @@ __global__ void bitonicSortShared1(
 
         for (uint stride = size / 2; stride > 0; stride >>= 1)
         {
-            __syncthreads();
+            cg::sync(cta);
             uint pos = 2 * threadIdx.x - (threadIdx.x & (stride - 1));
             Comparator(
                 s_key[pos +      0], s_val[pos +      0],
@@ -140,7 +147,7 @@ __global__ void bitonicSortShared1(
     {
         for (uint stride = SHARED_SIZE_LIMIT / 2; stride > 0; stride >>= 1)
         {
-            __syncthreads();
+            cg::sync(cta);
             uint pos = 2 * threadIdx.x - (threadIdx.x & (stride - 1));
             Comparator(
                 s_key[pos +      0], s_val[pos +      0],
@@ -151,7 +158,7 @@ __global__ void bitonicSortShared1(
     }
 
 
-    __syncthreads();
+    cg::sync(cta);
     d_DstKey[                      0] = s_key[threadIdx.x +                       0];
     d_DstVal[                      0] = s_val[threadIdx.x +                       0];
     d_DstKey[(SHARED_SIZE_LIMIT / 2)] = s_key[threadIdx.x + (SHARED_SIZE_LIMIT / 2)];
@@ -206,6 +213,8 @@ __global__ void bitonicMergeShared(
     uint dir
 )
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     //Shared memory storage for current subarray
     __shared__ uint s_key[SHARED_SIZE_LIMIT];
     __shared__ uint s_val[SHARED_SIZE_LIMIT];
@@ -225,7 +234,7 @@ __global__ void bitonicMergeShared(
 
     for (uint stride = SHARED_SIZE_LIMIT / 2; stride > 0; stride >>= 1)
     {
-        __syncthreads();
+        cg::sync(cta);
         uint pos = 2 * threadIdx.x - (threadIdx.x & (stride - 1));
         Comparator(
             s_key[pos +      0], s_val[pos +      0],
@@ -234,7 +243,7 @@ __global__ void bitonicMergeShared(
         );
     }
 
-    __syncthreads();
+    cg::sync(cta);
     d_DstKey[                      0] = s_key[threadIdx.x +                       0];
     d_DstVal[                      0] = s_val[threadIdx.x +                       0];
     d_DstKey[(SHARED_SIZE_LIMIT / 2)] = s_key[threadIdx.x + (SHARED_SIZE_LIMIT / 2)];

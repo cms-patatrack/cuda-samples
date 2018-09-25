@@ -61,13 +61,13 @@
     <scope>2:Graphics Interop</scope>
     <scope>3:Physically-Based Simulation</scope>
   </scopes>
-  <sm-arch>sm20</sm-arch>
   <sm-arch>sm30</sm-arch>
   <sm-arch>sm35</sm-arch>
   <sm-arch>sm37</sm-arch>
   <sm-arch>sm50</sm-arch>
   <sm-arch>sm52</sm-arch>
   <sm-arch>sm60</sm-arch>
+  <sm-arch>sm70</sm-arch>
   <sources>
     <extraheader>..\..\common\inc\param.h</extraheader>
     <extraheader>..\..\common\inc\paramgl.h</extraheader>

@@ -23,6 +23,10 @@
 
 
 #include <assert.h>
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
+
 #include <helper_cuda.h>
 #include "mergeSort_common.h"
 
@@ -113,6 +117,8 @@ template<uint sortDir> __global__ void mergeSortSharedKernel(
     uint arrayLength
 )
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     __shared__ uint s_key[SHARED_SIZE_LIMIT];
     __shared__ uint s_val[SHARED_SIZE_LIMIT];
 
@@ -131,7 +137,7 @@ template<uint sortDir> __global__ void mergeSortSharedKernel(
         uint *baseKey = s_key + 2 * (threadIdx.x - lPos);
         uint *baseVal = s_val + 2 * (threadIdx.x - lPos);
 
-        __syncthreads();
+        cg::sync(cta);
         uint keyA = baseKey[lPos +      0];
         uint valA = baseVal[lPos +      0];
         uint keyB = baseKey[lPos + stride];
@@ -139,14 +145,14 @@ template<uint sortDir> __global__ void mergeSortSharedKernel(
         uint posA = binarySearchExclusive<sortDir>(keyA, baseKey + stride, stride, stride) + lPos;
         uint posB = binarySearchInclusive<sortDir>(keyB, baseKey +      0, stride, stride) + lPos;
 
-        __syncthreads();
+        cg::sync(cta);
         baseKey[posA] = keyA;
         baseVal[posA] = valA;
         baseKey[posB] = keyB;
         baseVal[posB] = valB;
     }
 
-    __syncthreads();
+    cg::sync(cta);
     d_DstKey[                      0] = s_key[threadIdx.x +                       0];
     d_DstVal[                      0] = s_val[threadIdx.x +                       0];
     d_DstKey[(SHARED_SIZE_LIMIT / 2)] = s_key[threadIdx.x + (SHARED_SIZE_LIMIT / 2)];
@@ -349,7 +355,8 @@ template<uint sortDir> inline __device__ void merge(
     uint lenA,
     uint nPowTwoLenA,
     uint lenB,
-    uint nPowTwoLenB
+    uint nPowTwoLenB,
+    cg::thread_block cta
 )
 {
     uint keyA, valA, keyB, valB, dstPosA, dstPosB;
@@ -368,7 +375,7 @@ template<uint sortDir> inline __device__ void merge(
         dstPosB = binarySearchInclusive<sortDir>(keyB, srcAKey, lenA, nPowTwoLenA) + threadIdx.x;
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     if (threadIdx.x < lenA)
     {
@@ -394,6 +401,8 @@ template<uint sortDir> __global__ void mergeElementaryIntervalsKernel(
     uint N
 )
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     __shared__ uint s_key[2 * SAMPLE_STRIDE];
     __shared__ uint s_val[2 * SAMPLE_STRIDE];
 
@@ -426,7 +435,7 @@ template<uint sortDir> __global__ void mergeElementaryIntervalsKernel(
     }
 
     //Load main input data
-    __syncthreads();
+    cg::sync(cta);
 
     if (threadIdx.x < lenSrcA)
     {
@@ -441,7 +450,7 @@ template<uint sortDir> __global__ void mergeElementaryIntervalsKernel(
     }
 
     //Merge data in shared memory
-    __syncthreads();
+    cg::sync(cta);
     merge<sortDir>(
         s_key,
         s_val,
@@ -450,11 +459,12 @@ template<uint sortDir> __global__ void mergeElementaryIntervalsKernel(
         s_key + SAMPLE_STRIDE,
         s_val + SAMPLE_STRIDE,
         lenSrcA, SAMPLE_STRIDE,
-        lenSrcB, SAMPLE_STRIDE
+        lenSrcB, SAMPLE_STRIDE, 
+        cta
     );
 
     //Store merged data
-    __syncthreads();
+    cg::sync(cta);
 
     if (threadIdx.x < lenSrcA)
     {

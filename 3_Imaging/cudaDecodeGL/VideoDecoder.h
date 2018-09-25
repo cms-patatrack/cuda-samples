@@ -1,5 +1,5 @@
 /*
- * Copyright 1993-2015 NVIDIA Corporation.  All rights reserved.
+ * Copyright 1993-2017 NVIDIA Corporation.  All rights reserved.
  *
  * Please refer to the NVIDIA end user license agreement (EULA) associated
  * with this source code for terms and conditions that govern your use of
@@ -12,9 +12,9 @@
 #ifndef NV_VIDEODECODER_H
 #define NV_VIDEODECODER_H
 
-#include <cuda.h>
-#include <cuviddec.h>
-#include <nvcuvid.h>
+#include "dynlink_cuda.h"     // <cuda.h>
+#include "dynlink_cuviddec.h" // <cuviddec.h>
+#include "dynlink_nvcuvid.h"  // <nvcuvid.h>
 
 #define MAX_FRAME_COUNT 2
 
@@ -59,13 +59,13 @@ class VideoDecoder
         targetHeight()
         const;
 
-        void
+        CUresult
         decodePicture(CUVIDPICPARAMS *pPictureParameters, CUcontext *pContext = NULL);
 
-        void
+        CUresult
         mapFrame(int iPictureIndex, CUdeviceptr *ppDevice, unsigned int *nPitch, CUVIDPROCPARAMS *pVideoProcessingParameters);
 
-        void
+        CUresult
         unmapFrame(CUdeviceptr pDevice);
 
     private:

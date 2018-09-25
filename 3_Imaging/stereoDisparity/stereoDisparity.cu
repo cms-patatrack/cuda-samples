@@ -71,14 +71,6 @@ runTest(int argc, char **argv)
     printf("> GPU device has %d Multi-Processors, SM %d.%d compute capabilities\n\n",
            deviceProp.multiProcessorCount, deviceProp.major, deviceProp.minor);
 
-    int version = (deviceProp.major * 0x10 + deviceProp.minor);
-
-    if (version < 0x20)
-    {
-        printf("%s: requires a minimum CUDA compute 2.0 capability\n", sSDKsample);
-        exit(EXIT_SUCCESS);
-    }
-
     StopWatchInterface *timer;
     sdkCreateTimer(&timer);
 

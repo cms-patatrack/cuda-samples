@@ -24,6 +24,10 @@
 
 #pragma once
 
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
+
 #include "Common.h"
 
 
@@ -180,6 +184,9 @@ __device__ void CUDAsubroutineInplaceIDCTvector(float *Vect0, int Step)
 
 __global__ void CUDAkernel2DCT(float *dst, float *src, int ImgStride)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
+
     __shared__ float block[KER2_BLOCK_HEIGHT * KER2_SMEMBLOCK_STRIDE];
 
     int OffsThreadInRow = threadIdx.y * BLOCK_SIZE + threadIdx.x;
@@ -193,12 +200,15 @@ __global__ void CUDAkernel2DCT(float *dst, float *src, int ImgStride)
     for (unsigned int i = 0; i < BLOCK_SIZE; i++)
         bl_ptr[i * KER2_SMEMBLOCK_STRIDE] = src[i * ImgStride];
 
+    cg::sync(cta);
     //process rows
     CUDAsubroutineInplaceDCTvector(block + (OffsThreadInCol + threadIdx.x) * KER2_SMEMBLOCK_STRIDE + OffsThreadInRow - threadIdx.x, 1);
 
+    cg::sync(cta);
     //process columns
     CUDAsubroutineInplaceDCTvector(bl_ptr, KER2_SMEMBLOCK_STRIDE);
 
+    cg::sync(cta);
     for (unsigned int i = 0; i < BLOCK_SIZE; i++)
         dst[i * ImgStride] = bl_ptr[i * KER2_SMEMBLOCK_STRIDE];
 }
@@ -220,6 +230,9 @@ __global__ void CUDAkernel2DCT(float *dst, float *src, int ImgStride)
 
 __global__ void CUDAkernel2IDCT(float *dst, float *src, int ImgStride)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
+
     __shared__ float block[KER2_BLOCK_HEIGHT * KER2_SMEMBLOCK_STRIDE];
 
     int OffsThreadInRow = threadIdx.y * BLOCK_SIZE + threadIdx.x;
@@ -233,11 +246,15 @@ __global__ void CUDAkernel2IDCT(float *dst, float *src, int ImgStride)
     for (unsigned int i = 0; i < BLOCK_SIZE; i++)
         bl_ptr[i * KER2_SMEMBLOCK_STRIDE] = src[i * ImgStride];
 
+    cg::sync(cta);
     //process rows
     CUDAsubroutineInplaceIDCTvector(block + (OffsThreadInCol + threadIdx.x) * KER2_SMEMBLOCK_STRIDE + OffsThreadInRow - threadIdx.x, 1);
 
+    cg::sync(cta);
     //process columns
     CUDAsubroutineInplaceIDCTvector(bl_ptr, KER2_SMEMBLOCK_STRIDE);
+
+    cg::sync(cta);
 
     for (unsigned int i = 0; i < BLOCK_SIZE; i++)
         dst[i * ImgStride] = bl_ptr[i * KER2_SMEMBLOCK_STRIDE];

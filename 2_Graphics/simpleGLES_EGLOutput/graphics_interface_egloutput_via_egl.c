@@ -95,7 +95,7 @@ static bool CheckExtension(const char *exts, const char *ext)
 
 int graphics_setup_window(int xpos, int ypos, int width, int height, const char *windowname)
 {
-    int device = 0, conn = 1, crtc = -1, plane = -1;
+    int device = 0, crtc = -1, plane = -1;
     int xsurfsize = 0, ysurfsize = 0;
     int xoffset = 0, yoffset = 0;
     int xmodesize = 0, ymodesize = 0;
@@ -226,22 +226,25 @@ int graphics_setup_window(int xpos, int ypos, int width, int height, const char 
     }
 
     // Query info for requested connector
-    if (conn >= drm_res_info->count_connectors) {
-        printf("Requested connector index (%d) exceeds count (%d)\n",
-               conn, drm_res_info->count_connectors);
-        exit(6);
+    int conn=0;
+    for (conn=0; conn < drm_res_info->count_connectors; ++conn)
+    {
+        drm_conn_id = drm_res_info->connectors[conn];
+        drm_conn_info = drmModeGetConnector(drm_fd, drm_conn_id);
+        if (drm_conn_info != NULL)
+        {
+            printf("connector %d found\n", drm_conn_info->connector_id);
+            if (drm_conn_info->connection == DRM_MODE_CONNECTED && drm_conn_info->count_modes > 0)
+            {
+                break;
+            }
+            drmModeFreeConnector(drm_conn_info);
+        }
     }
-    drm_conn_id = drm_res_info->connectors[conn];
-    drm_conn_info = drmModeGetConnector(drm_fd, drm_conn_id);
-    if (!drm_conn_info) {
-        printf("Unable to obtain info for connector (%d)\n", drm_conn_id);
-        exit(6);
-    } else if (drm_conn_info->connection != DRM_MODE_CONNECTED) {
-        printf("Requested connnector is not connected (mode=%d)\n",
-               drm_conn_info->connection);
-        exit(6);
-    } else if (drm_conn_info->count_modes <= 0) {
-        printf("Requested connnector has no available modes\n");
+
+    if (conn == drm_res_info->count_connectors)
+    {
+        printf("No active connectors found\n");
         exit(6);
     }
     printf("Obtained connector information\n");

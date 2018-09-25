@@ -14,6 +14,10 @@
 ////////////////////////////////////////////////////////////////////////////////
 #include <stdio.h>
 #include <stdlib.h>
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
+
 #include <helper_cuda.h>
 #include "binomialOptions_common.h"
 #include "realtype.h"
@@ -62,6 +66,8 @@ __device__ inline double expiryCallValue(double S, double X, double vDt, int i)
 
 __global__ void binomialOptionsKernel()
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     __shared__ real call_exchange[THREADBLOCK_SIZE + 1];
 
     const int     tid = threadIdx.x;
@@ -85,9 +91,9 @@ __global__ void binomialOptionsKernel()
     for(int i = NUM_STEPS; i > 0; --i)
     {
         call_exchange[tid] = call[0];
-        __syncthreads();
+        cg::sync(cta);
         call[ELEMS_PER_THREAD] = call_exchange[tid + 1];
-        __syncthreads();
+        cg::sync(cta);
 
         if (i > final_it)
         {

@@ -121,13 +121,8 @@ int main(int argc, char **argv)
     size_t ptxSize;
     kernel_file = sdkFindFilePath("BlackScholes_kernel.cuh", argv[0]);
 
-    // Set a Compiler Option to have maximum register to be used by each thread.
-    char *compile_options[1];
-    compile_options[0] = (char *) malloc(sizeof(char)*(strlen("--maxrregcount=16")));
-    strcpy((char *)compile_options[0],"--maxrregcount=16");
-
     // Compile the kernel BlackScholes_kernel.
-    compileFileToPTX(kernel_file, 1, (const char **)compile_options, &ptx, &ptxSize);
+    compileFileToPTX(kernel_file, argc, argv, &ptx, &ptxSize, 0);
     CUmodule module = loadPTX(ptx, argc, argv);
 
     CUfunction kernel_addr;

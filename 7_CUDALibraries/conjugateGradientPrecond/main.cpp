@@ -171,15 +171,6 @@ int main(int argc, char **argv)
     printf("> GPU device has %d Multi-Processors, SM %d.%d compute capabilities\n\n",
            deviceProp.multiProcessorCount, deviceProp.major, deviceProp.minor);
 
-    int version = (deviceProp.major * 0x10 + deviceProp.minor);
-
-    if (version < 0x11)
-    {
-        printf("%s: requires a minimum CUDA compute 1.1 capability\n", sSDKname);
-
-        exit(EXIT_SUCCESS);
-    }
-
     /* Generate a random tridiagonal symmetric matrix in CSR (Compressed Sparse Row) format */
     M = N = 16384;
     nz = 5*N-4*(int)sqrt((double)N);

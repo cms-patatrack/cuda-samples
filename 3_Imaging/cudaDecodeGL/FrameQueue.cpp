@@ -1,5 +1,5 @@
 /*
- * Copyright 1993-2015 NVIDIA Corporation.  All rights reserved.
+ * Copyright 1993-2017 NVIDIA Corporation.  All rights reserved.
  *
  * Please refer to the NVIDIA end user license agreement (EULA) associated
  * with this source code for terms and conditions that govern your use of
@@ -21,12 +21,13 @@
 #define dbgprintf(x)
 #endif
 
-FrameQueue::FrameQueue():
-    nReadPosition_(0)
+FrameQueue::FrameQueue(): hEvent_(0)
+    , nReadPosition_(0)
     , nFramesInQueue_(0)
     , bEndOfDecode_(0)
 {
 #if defined(WIN32) || defined(_WIN32) || defined(WIN64) || defined(_WIN64)
+    hEvent_ = CreateEvent(NULL, false, false, NULL);
     InitializeCriticalSection(&oCriticalSection_);
 #endif
     memset(aDisplayQueue_, 0, cnMaximumSize * sizeof(CUVIDPARSERDISPINFO));
@@ -37,9 +38,17 @@ FrameQueue::~FrameQueue()
 {
 #if defined(WIN32) || defined(_WIN32) || defined(WIN64) || defined(_WIN64)
     DeleteCriticalSection(&oCriticalSection_);
+    CloseHandle(hEvent_);
 #endif
 }
 
+void
+FrameQueue::waitForQueueUpdate()
+{
+#if defined(WIN32) || defined(_WIN32) || defined(WIN64) || defined(_WIN64)
+    WaitForSingleObject(hEvent_, 10);
+#endif
+}
 
 void
 FrameQueue::enter_CS(CRITICAL_SECTION *pCS)
@@ -100,10 +109,11 @@ FrameQueue::enqueue(const CUVIDPARSERDISPINFO *pPicParams)
         if (bPlacedFrame) // Done
             break;
 
-        sleep(1);   // Wait a bit
+        Sleep(1);   // Wait a bit
     }
     while (!bEndOfDecode_);
 
+    signalStatusChange();  // Signal for the display thread
 }
 
 // if no valid picture can be return the pic-info's picture_index will
@@ -147,16 +157,17 @@ const
 }
 
 bool
-FrameQueue::isDecodeFinished()
+FrameQueue::isEndOfDecode()
 const
 {
-    return (nFramesInQueue_ == 0 && 0 != bEndOfDecode_);
+    return (0 != bEndOfDecode_);
 }
 
 void
 FrameQueue::endDecode()
 {
     bEndOfDecode_ = true;
+    signalStatusChange();  // Signal for the display thread
 }
 
 
@@ -171,14 +182,18 @@ FrameQueue::waitUntilFrameAvailable(int nPictureIndex)
 {
     while (isInUse(nPictureIndex))
     {
-        sleep(1);   // Decoder is getting too far ahead from display
+        Sleep(1);   // Decoder is getting too far ahead from display
 
-        if (0 != bEndOfDecode_)
-        {
+        if (isEndOfDecode())
             return false;
-        }
     }
 
     return true;
+}
+
+void
+FrameQueue::signalStatusChange()
+{
+    set_event(hEvent_);
 }
 

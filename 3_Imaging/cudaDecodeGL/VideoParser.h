@@ -1,5 +1,5 @@
 /*
- * Copyright 1993-2015 NVIDIA Corporation.  All rights reserved.
+ * Copyright 1993-2017 NVIDIA Corporation.  All rights reserved.
  *
  * Please refer to the NVIDIA end user license agreement (EULA) associated
  * with this source code for terms and conditions that govern your use of
@@ -12,8 +12,9 @@
 #ifndef NV_VIDEO_PARSER
 #define NV_VIDEO_PARSER
 
-#include <cuda.h>
-#include <nvcuvid.h>
+#include "dynlink_cuda.h"     // <cuda.h>
+#include "dynlink_cuviddec.h" // <cuviddec.h>
+#include "dynlink_nvcuvid.h"  // <nvcuvid.h>
 
 #include <iostream>
 
@@ -40,7 +41,7 @@ class VideoParser
         //          is used in the parser-callbacks to decode video-frames.
         //      pFrameQueue - pointer to a valid FrameQueue object. The FrameQueue is used
         //          by  the parser-callbacks to store decoded frames in it.
-        VideoParser(VideoDecoder *pVideoDecoder, FrameQueue *pFrameQueue, CUcontext *pCudaContext = NULL);
+        VideoParser(VideoDecoder *pVideoDecoder, FrameQueue *pFrameQueue, CUVIDEOFORMATEX *pFormat, CUcontext *pCudaContext = NULL);
 
     private:
         // Struct containing user-data to be passed by parser-callbacks.

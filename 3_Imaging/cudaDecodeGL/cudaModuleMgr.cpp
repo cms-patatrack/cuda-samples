@@ -1,5 +1,5 @@
 /*
- * Copyright 1993-2015 NVIDIA Corporation.  All rights reserved.
+ * Copyright 1993-2017 NVIDIA Corporation.  All rights reserved.
  *
  * Please refer to the NVIDIA end user license agreement (EULA) associated
  * with this source code for terms and conditions that govern your use of
@@ -20,11 +20,9 @@
 #include <iostream>
 #include <cstring>
 
-#include <cuda.h>
-#include <builtin_types.h>
-
-#include <helper_cuda_drvapi.h>
-
+#include "dynlink_cuda.h"
+#include "dynlink_builtin_types.h"
+#include "helper_cuda_drvapi.h"
 #include "cudaModuleMgr.h"
 
 #define ERROR_BUFFER_SIZE 256
@@ -46,10 +44,10 @@ bool modInitCTX(sCtxModule *pCtx, const char *filename, const char *exec_path, i
     pCtx->mModuleName    = filename;
 
     CUresult cuStatus;
-    int file_size = 0;
     string module_path;
     string ptx_source;
 
+    printf("\nstring = %s\n", pCtx->mModuleName.c_str());
     char *actual_path = sdkFindFilePath(pCtx->mModuleName.c_str(), exec_path);
 
     if (actual_path)

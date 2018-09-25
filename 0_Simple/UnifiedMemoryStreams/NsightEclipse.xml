@@ -31,6 +31,7 @@
     <keyword>UVM</keyword>
     <keyword>openMP</keyword>
     <keyword>Streams</keyword>
+    <keyword>pthreads</keyword>
   </keywords>
   <libraries>
     <library>cublas</library>
@@ -40,6 +41,7 @@
   <nsight_eclipse>true</nsight_eclipse>
   <primary_file>UnifiedMemoryStreams.cu</primary_file>
   <required_dependencies>
+    <dependency>OpenMP</dependency>
     <dependency>UVM</dependency>
     <dependency>CUBLAS</dependency>
   </required_dependencies>
@@ -54,6 +56,7 @@
   <sm-arch>sm50</sm-arch>
   <sm-arch>sm52</sm-arch>
   <sm-arch>sm60</sm-arch>
+  <sm-arch>sm70</sm-arch>
   <supported_envs>
     <env>
       <arch>x86_64</arch>

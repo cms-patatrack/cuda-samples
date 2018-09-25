@@ -14,6 +14,9 @@
 #ifndef CUDAMATH_H
 #define CUDAMATH_H
 
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
 
 // Use power method to find the first eigenvector.
 // http://www.miislita.com/information-retrieval-tutorial/matrix-tutorial-3-eigenvalues-eigenvectors.html
@@ -36,19 +39,23 @@ inline __device__ __host__ float3 firstEigenVector(float matrix[6])
     return v;
 }
 
-inline __device__ void colorSums(const float3 *colors, float3 *sums)
+inline __device__ void colorSums(const float3 *colors, float3 *sums, cg::thread_group tile)
 {
     const int idx = threadIdx.x;
 
     sums[idx] = colors[idx];
+    cg::sync(tile);
     sums[idx] += sums[idx^8];
+    cg::sync(tile);
     sums[idx] += sums[idx^4];
+    cg::sync(tile);
     sums[idx] += sums[idx^2];
+    cg::sync(tile);
     sums[idx] += sums[idx^1];
 }
 
 
-inline __device__ float3 bestFitLine(const float3 *colors, float3 color_sum)
+inline __device__ float3 bestFitLine(const float3 *colors, float3 color_sum, cg::thread_group tile)
 {
     // Compute covariance matrix of the given colors.
     const int idx = threadIdx.x;
@@ -66,6 +73,7 @@ inline __device__ float3 bestFitLine(const float3 *colors, float3 color_sum)
     covariance[6 * idx + 4] = diff.y * diff.z;
     covariance[6 * idx + 5] = diff.z * diff.z;
 
+    cg::sync(tile);
     for (int d = 8; d > 0; d >>= 1)
     {
         if (idx < d)
@@ -77,6 +85,7 @@ inline __device__ float3 bestFitLine(const float3 *colors, float3 color_sum)
             covariance[6 * idx + 4] += covariance[6 * (idx+d) + 4];
             covariance[6 * idx + 5] += covariance[6 * (idx+d) + 5];
         }
+        cg::sync(tile);
     }
 
     // Compute first eigen vector.

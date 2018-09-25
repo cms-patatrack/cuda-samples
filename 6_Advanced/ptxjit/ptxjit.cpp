@@ -158,13 +158,6 @@ int main(int argc, char **argv)
     checkCudaErrors(cudaGetDeviceProperties(&deviceProp, cuda_device));
     printf("> Using CUDA device [%d]: %s\n", cuda_device, deviceProp.name);
 
-    if (deviceProp.major < 2)
-    {
-        fprintf(stderr, "Compute Capability 2.0 or greater required for this sample.\n");
-        fprintf(stderr, "Maximum Compute Capability of device[%d] is %d.%d.\n", cuda_device,deviceProp.major,deviceProp.minor);
-        exit(EXIT_WAIVED);
-    }
-
     // Allocate memory on host and device (Runtime API)
     // NOTE: The runtime API will create the GPU Context implicitly here
     if ((h_data = (int *)malloc(memSize)) == NULL)

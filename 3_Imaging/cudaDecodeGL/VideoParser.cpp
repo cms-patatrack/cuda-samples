@@ -1,5 +1,5 @@
 /*
- * Copyright 1993-2015 NVIDIA Corporation.  All rights reserved.
+ * Copyright 1993-2017 NVIDIA Corporation.  All rights reserved.
  *
  * Please refer to the NVIDIA end user license agreement (EULA) associated
  * with this source code for terms and conditions that govern your use of
@@ -17,7 +17,7 @@
 #include <cstring>
 #include <cassert>
 
-VideoParser::VideoParser(VideoDecoder *pVideoDecoder, FrameQueue *pFrameQueue, CUcontext *pCudaContext): hParser_(0)
+VideoParser::VideoParser(VideoDecoder *pVideoDecoder, FrameQueue *pFrameQueue, CUVIDEOFORMATEX *pFormat, CUcontext *pCudaContext) : hParser_(0)
 {
     assert(0 != pFrameQueue);
     oParserData_.pFrameQueue   = pFrameQueue;
@@ -31,6 +31,7 @@ VideoParser::VideoParser(VideoDecoder *pVideoDecoder, FrameQueue *pFrameQueue, C
     oVideoParserParameters.ulMaxNumDecodeSurfaces = pVideoDecoder->maxDecodeSurfaces();
     oVideoParserParameters.ulMaxDisplayDelay      = 1;  // this flag is needed so the parser will push frames out to the decoder as quickly as it can
     oVideoParserParameters.pUserData              = &oParserData_;
+    oVideoParserParameters.pExtVideoInfo          = pFormat;
     oVideoParserParameters.pfnSequenceCallback    = HandleVideoSequence;    // Called before decoding frames and/or whenever there is a format change
     oVideoParserParameters.pfnDecodePicture       = HandlePictureDecode;    // Called when a picture is ready to be decoded (decode order)
     oVideoParserParameters.pfnDisplayPicture      = HandlePictureDisplay;   // Called whenever a picture is ready to be displayed (display order)
@@ -44,9 +45,13 @@ VideoParser::HandleVideoSequence(void *pUserData, CUVIDEOFORMAT *pFormat)
 {
     VideoParserData *pParserData = reinterpret_cast<VideoParserData *>(pUserData);
 
-    if ((pFormat->codec         != pParserData->pVideoDecoder->codec())         // codec-type
-        || (pFormat->coded_width   != pParserData->pVideoDecoder->frameWidth())
-        || (pFormat->coded_height  != pParserData->pVideoDecoder->frameHeight())
+    if ((pFormat->codec != cudaVideoCodec_VP9) && ((pFormat->coded_width != pParserData->pVideoDecoder->frameWidth())
+        || (pFormat->coded_height != pParserData->pVideoDecoder->frameHeight())))
+    {
+        // Only VP9 supports dynamic resolution Change.
+        return 0;
+    }
+    if ((pFormat->codec != pParserData->pVideoDecoder->codec())         // codec-type
         || (pFormat->chroma_format != pParserData->pVideoDecoder->chromaFormat()))
     {
         // We don't deal with dynamic changes in video format
@@ -67,7 +72,10 @@ VideoParser::HandlePictureDecode(void *pUserData, CUVIDPICPARAMS *pPicParams)
     if (!bFrameAvailable)
         return false;
 
-    pParserData->pVideoDecoder->decodePicture(pPicParams, pParserData->pContext);
+    if (pParserData->pVideoDecoder->decodePicture(pPicParams, pParserData->pContext) != CUDA_SUCCESS)
+    {
+        return false;
+    }
 
     return true;
 }

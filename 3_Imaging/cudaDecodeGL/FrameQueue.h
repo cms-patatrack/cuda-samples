@@ -1,5 +1,5 @@
 /*
- * Copyright 1993-2015 NVIDIA Corporation.  All rights reserved.
+ * Copyright 1993-2017 NVIDIA Corporation.  All rights reserved.
  *
  * Please refer to the NVIDIA end user license agreement (EULA) associated
  * with this source code for terms and conditions that govern your use of
@@ -12,17 +12,16 @@
 #ifndef FRAMEQUEUE_H
 #define FRAMEQUEUE_H
 
-#include <nvcuvid.h>
+#include "dynlink_nvcuvid.h"
 
 #if defined(WIN32) || defined(_WIN32) || defined(WIN64) || defined(_WIN64)
 #include <windows.h>
-#define sleep(x) Sleep(x)
-
 #else
 #include <unistd.h>
 #include <string.h>
 typedef unsigned int CRITICAL_SECTION;
 typedef unsigned int HANDLE;
+#define Sleep(x) usleep(1000*x)
 #endif
 
 class FrameQueue
@@ -34,6 +33,9 @@ class FrameQueue
 
         virtual
         ~FrameQueue();
+
+        void
+        waitForQueueUpdate();
 
         void
         enter_CS(CRITICAL_SECTION *pCS);
@@ -70,11 +72,13 @@ class FrameQueue
         const;
 
         bool
-        isDecodeFinished()
+        isEndOfDecode()
         const;
 
         void
         endDecode();
+
+        bool isEmpty() { return nFramesInQueue_ == 0; }
 
         // Spins until frame becomes available or decoding
         // gets canceled.
@@ -85,7 +89,10 @@ class FrameQueue
         waitUntilFrameAvailable(int nPictureIndex);
 
     private:
+        void
+        signalStatusChange();
 
+        HANDLE hEvent_;
         CRITICAL_SECTION    oCriticalSection_;
         volatile int        nReadPosition_;
         volatile int        nFramesInQueue_;

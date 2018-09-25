@@ -31,6 +31,19 @@ void dgetrf_test(Parameters *host_params, Parameters *device_params)
 
     // Launch the kernel (just a device-function call in CDP terms)
     dgetrf_cdpentry<<< 1, 1 >>>(device_params);
+
+    cudaError_t err = cudaGetLastError();
+
+    if (err != cudaSuccess) 
+    {
+        printf("Failed to launch CDP kernel (%s)\nCalling exit...\n", cudaGetErrorString(err));
+        exit(EXIT_FAILURE);
+    } 
+    else 
+    {
+        printf("Successfully launched CDP kernel\n");
+    }
+
     checkCudaErrors(cudaDeviceSynchronize());
 
     double gpu_sec = time_in_seconds() - t_start;

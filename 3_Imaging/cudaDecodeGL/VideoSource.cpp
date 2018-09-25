@@ -1,5 +1,5 @@
 /*
- * Copyright 1993-2015 NVIDIA Corporation.  All rights reserved.
+ * Copyright 1993-2017 NVIDIA Corporation.  All rights reserved.
  *
  * Please refer to the NVIDIA end user license agreement (EULA) associated
  * with this source code for terms and conditions that govern your use of
@@ -129,17 +129,13 @@ int
 VideoSource::HandleVideoData(void *pUserData, CUVIDSOURCEDATAPACKET *pPacket)
 {
     VideoSourceData *pVideoSourceData = (VideoSourceData *)pUserData;
-
     // Parser calls back for decode & display within cuvidParseVideoData
-    if (!pVideoSourceData->pFrameQueue->isDecodeFinished())
-    {
-        CUresult oResult = cuvidParseVideoData(pVideoSourceData->hVideoParser, pPacket);
+    CUresult oResult = cuvidParseVideoData(pVideoSourceData->hVideoParser, pPacket);
 
-        if ((pPacket->flags & CUVID_PKT_ENDOFSTREAM) || (oResult != CUDA_SUCCESS))
-            pVideoSourceData->pFrameQueue->endDecode();
-    }
+    if ((pPacket->flags & CUVID_PKT_ENDOFSTREAM) || (oResult != CUDA_SUCCESS))
+        pVideoSourceData->pFrameQueue->endDecode();
 
-    return !pVideoSourceData->pFrameQueue->isDecodeFinished();
+    return !pVideoSourceData->pFrameQueue->isEndOfDecode();
 }
 
 std::ostream &

@@ -264,26 +264,7 @@ int main(int argc, char **argv)
     cudaDeviceProp deviceProp;
     checkCudaErrors(cudaGetDeviceProperties(&deviceProp, cuda_device));
 
-    if ((1 == deviceProp.major) && (deviceProp.minor < 1))
-    {
-        printf("%s does not have Compute Capability 1.1 or newer.  Reducing workload.\n", deviceProp.name);
-    }
-
-    if (deviceProp.major >= 2)
-    {
-        niterations = 5;
-    }
-    else
-    {
-        if (deviceProp.minor > 1)
-        {
-            niterations = 5;
-        }
-        else
-        {
-            niterations = 1; // reduced workload for compute capability 1.0 and 1.1
-        }
-    }
+    niterations = 5;
 
     // Check if GPU can map host memory (Generic Method), if not then we override bPinGenericMemory to be false
     if (bPinGenericMemory)
@@ -325,6 +306,7 @@ int main(int argc, char **argv)
     // allocate device memory
     int *d_a = 0, *d_c = 0;             // pointers to data and init value in the device memory
     checkCudaErrors(cudaMalloc((void **)&d_a, nbytes));
+    checkCudaErrors(cudaMemset(d_a, 0x0, nbytes));
     checkCudaErrors(cudaMalloc((void **)&d_c, sizeof(int)));
     checkCudaErrors(cudaMemcpy(d_c, &c, sizeof(int), cudaMemcpyHostToDevice));
 

@@ -415,12 +415,19 @@ typedef enum CUjit_option_enum
  */
 typedef enum CUjit_target_enum
 {
-    CU_TARGET_COMPUTE_10 = 0,   /**< Compute device class 1.0 */
-    CU_TARGET_COMPUTE_11,       /**< Compute device class 1.1 */
-    CU_TARGET_COMPUTE_12,       /**< Compute device class 1.2 */
-    CU_TARGET_COMPUTE_13,       /**< Compute device class 1.3 */
-    CU_TARGET_COMPUTE_20,       /**< Compute device class 2.0 */
-    CU_TARGET_COMPUTE_21        /**< Compute device class 2.1 */
+    CU_TARGET_COMPUTE_20 = 20,       /**< Compute device class 2.0 */
+    CU_TARGET_COMPUTE_21 = 21,       /**< Compute device class 2.1 */
+    CU_TARGET_COMPUTE_30 = 30,       /**< Compute device class 3.0 */
+    CU_TARGET_COMPUTE_32 = 32,       /**< Compute device class 3.2 */
+    CU_TARGET_COMPUTE_35 = 35,       /**< Compute device class 3.5 */
+    CU_TARGET_COMPUTE_37 = 37,       /**< Compute device class 3.7 */
+    CU_TARGET_COMPUTE_50 = 50,       /**< Compute device class 5.0 */
+    CU_TARGET_COMPUTE_52 = 52,       /**< Compute device class 5.2 */
+    CU_TARGET_COMPUTE_53 = 53,       /**< Compute device class 5.3 */
+    CU_TARGET_COMPUTE_60 = 60,       /**< Compute device class 6.0.*/
+    CU_TARGET_COMPUTE_61 = 61,       /**< Compute device class 6.1.*/
+    CU_TARGET_COMPUTE_62 = 62,       /**< Compute device class 6.2.*/
+    CU_TARGET_COMPUTE_70 = 70        /**< Compute device class 7.0.*/
 } CUjit_target;
 
 /**

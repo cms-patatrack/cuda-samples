@@ -22,7 +22,9 @@
 * dct8x8_kernel_quantization.cu file.
 */
 #pragma once
+#include <cooperative_groups.h>
 
+namespace cg = cooperative_groups;
 #include "Common.h"
 
 
@@ -61,6 +63,8 @@ __shared__ float CurBlockLocal2[BLOCK_SIZE2];
 */
 __global__ void CUDAkernel1DCT(float *Dst, int ImgWidth, int OffsetXBlocks, int OffsetYBlocks)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     // Block index
     const int bx = blockIdx.x + OffsetXBlocks;
     const int by = blockIdx.y + OffsetYBlocks;
@@ -77,7 +81,7 @@ __global__ void CUDAkernel1DCT(float *Dst, int ImgWidth, int OffsetXBlocks, int 
     CurBlockLocal1[(ty << BLOCK_SIZE_LOG2) + tx ] = tex2D(TexSrc, tex_x, tex_y);
 
     //synchronize threads to make sure the block is copied
-    __syncthreads();
+    cg::sync(cta);
 
     //calculate the multiplication of DCTv8matrixT * A and place it in the second block
     float curelem = 0;
@@ -95,7 +99,7 @@ __global__ void CUDAkernel1DCT(float *Dst, int ImgWidth, int OffsetXBlocks, int 
     CurBlockLocal2[(ty << BLOCK_SIZE_LOG2) + tx ] = curelem;
 
     //synchronize threads to make sure the first 2 matrices are multiplied and the result is stored in the second block
-    __syncthreads();
+    cg::sync(cta);
 
     //calculate the multiplication of (DCTv8matrixT * A) * DCTv8matrix and place it in the first block
     curelem = 0;
@@ -113,7 +117,7 @@ __global__ void CUDAkernel1DCT(float *Dst, int ImgWidth, int OffsetXBlocks, int 
     CurBlockLocal1[(ty << BLOCK_SIZE_LOG2) + tx ] = curelem;
 
     //synchronize threads to make sure the matrices are multiplied and the result is stored back in the first block
-    __syncthreads();
+    cg::sync(cta);
 
     //copy current coefficient to its place in the result array
     Dst[ FMUL(((by << BLOCK_SIZE_LOG2) + ty), ImgWidth) + ((bx << BLOCK_SIZE_LOG2) + tx) ] = CurBlockLocal1[(ty << BLOCK_SIZE_LOG2) + tx ];
@@ -134,6 +138,8 @@ __global__ void CUDAkernel1DCT(float *Dst, int ImgWidth, int OffsetXBlocks, int 
 */
 __global__ void CUDAkernel1IDCT(float *Dst, int ImgWidth, int OffsetXBlocks, int OffsetYBlocks)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     // Block index
     int bx = blockIdx.x + OffsetXBlocks;
     int by = blockIdx.y + OffsetYBlocks;
@@ -150,7 +156,7 @@ __global__ void CUDAkernel1IDCT(float *Dst, int ImgWidth, int OffsetXBlocks, int
     CurBlockLocal1[(ty << BLOCK_SIZE_LOG2) + tx ] = tex2D(TexSrc, tex_x, tex_y);
 
     //synchronize threads to make sure the block is copied
-    __syncthreads();
+    cg::sync(cta);
 
     //calculate the multiplication of DCTv8matrix * A and place it in the second block
     float curelem = 0;
@@ -168,7 +174,7 @@ __global__ void CUDAkernel1IDCT(float *Dst, int ImgWidth, int OffsetXBlocks, int
     CurBlockLocal2[(ty << BLOCK_SIZE_LOG2) + tx ] = curelem;
 
     //synchronize threads to make sure the first 2 matrices are multiplied and the result is stored in the second block
-    __syncthreads();
+    cg::sync(cta);
 
     //calculate the multiplication of (DCTv8matrix * A) * DCTv8matrixT and place it in the first block
     curelem = 0;
@@ -186,7 +192,7 @@ __global__ void CUDAkernel1IDCT(float *Dst, int ImgWidth, int OffsetXBlocks, int
     CurBlockLocal1[(ty << BLOCK_SIZE_LOG2) + tx ] = curelem;
 
     //synchronize threads to make sure the matrices are multiplied and the result is stored back in the first block
-    __syncthreads();
+    cg::sync(cta);
 
     //copy current coefficient to its place in the result array
     Dst[ FMUL(((by << BLOCK_SIZE_LOG2) + ty), ImgWidth) + ((bx << BLOCK_SIZE_LOG2) + tx) ] = CurBlockLocal1[(ty << BLOCK_SIZE_LOG2) + tx ];

@@ -63,16 +63,6 @@ int main(int argc, char **argv)
         return 0;
     }
 
-    cudaDeviceProp deviceProp;
-    int dev = findCudaDevice(argc, (const char **)argv);
-    checkCudaErrors(cudaGetDeviceProperties(&deviceProp, dev));
-
-    if (((deviceProp.major << 4) + deviceProp.minor) < 0x20)
-    {
-        fprintf(stderr, "quasirandomGenerator requires Compute Capability of SM 2.0 or higher to run.\n");
-        exit(EXIT_WAIVED);
-    }
-
     sdkCreateTimer(&hTimer);
 
     printf("Allocating GPU memory...\n");

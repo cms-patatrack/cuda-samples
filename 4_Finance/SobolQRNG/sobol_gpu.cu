@@ -34,12 +34,17 @@
 
 #include "sobol.h"
 #include "sobol_gpu.h"
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
 #include <helper_cuda.h>
 
 #define k_2powneg32 2.3283064E-10F
 
 __global__ void sobolGPU_kernel(unsigned n_vectors, unsigned n_dimensions, unsigned *d_directions, float *d_output)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     __shared__ unsigned int v[n_directions];
 
     // Offset into the correct dimension as specified by the
@@ -55,7 +60,7 @@ __global__ void sobolGPU_kernel(unsigned n_vectors, unsigned n_dimensions, unsig
         v[threadIdx.x] = d_directions[threadIdx.x];
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     // Set initial index (i.e. which vector this thread is
     // computing first) and stride (i.e. step to the next vector

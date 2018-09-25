@@ -29,6 +29,10 @@
 // - Threads are synced
 // - For every pixel inside the block weights are considered to be constants
 ////////////////////////////////////////////////////////////////////////////////
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
+
 __global__ void NLM2(
     TColor *dst,
     int imageW,
@@ -37,6 +41,9 @@ __global__ void NLM2(
     float lerpC
 )
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
+
     //Weights cache
     __shared__ float fWeights[BLOCKDIM_X * BLOCKDIM_Y];
 
@@ -71,7 +78,7 @@ __global__ void NLM2(
         //Write the result to shared memory
         fWeights[threadIdx.y * BLOCKDIM_X + threadIdx.x] = weight;
         //Wait until all the weights are ready
-        __syncthreads();
+        cg::sync(cta);
 
 
         //Normalized counter for the NLM weight threshold
@@ -150,6 +157,9 @@ __global__ void NLM2diag(
     float LerpC
 )
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
+
     //Weights cache
     __shared__ float fWeights[BLOCKDIM_X * BLOCKDIM_Y];
 
@@ -184,7 +194,7 @@ __global__ void NLM2diag(
         //Write the result to shared memory
         fWeights[threadIdx.y * BLOCKDIM_X + threadIdx.x] = weight;
         //Wait until all the weights are ready
-        __syncthreads();
+        cg::sync(cta);
 
         //Normalized counter for the NLM weight threshold
         float fCount = 0;

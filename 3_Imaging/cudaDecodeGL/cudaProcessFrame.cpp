@@ -1,5 +1,5 @@
 /*
- * Copyright 1993-2015 NVIDIA Corporation.  All rights reserved.
+ * Copyright 1993-2017 NVIDIA Corporation.  All rights reserved.
  *
  * Please refer to the NVIDIA end user license agreement (EULA) associated
  * with this source code for terms and conditions that govern your use of
@@ -22,9 +22,9 @@
 
 #include <math.h>
 
-#include <cuda.h>
-#include <builtin_types.h>
-#include <helper_cuda_drvapi.h>
+#include "dynlink_cuda.h" // <cuda.h>
+#include "helper_cuda_drvapi.h"
+#include "dynlink_builtin_types.h"
 
 // These store the matrix for YUV2RGB transformation
 __constant__ float  constHueColorSpaceMat[9];
@@ -107,7 +107,7 @@ CUresult  cudaLaunchNV12toARGBDrv(CUdeviceptr d_srcNV12, size_t nSourcePitch,
     dim3 block(32,16,1);
     dim3 grid((width+(2*block.x-1))/(2*block.x), (height+(block.y-1))/block.y, 1);
 
-#if CUDA_VERSION >= 4000
+#if __CUDA_API_VERSION >= 4000
     // This is the new CUDA 4.0 API for Kernel Parameter passing and Kernel Launching (simpler method)
     void *args[] = { &d_srcNV12, &nSourcePitch,
                      &d_dstARGB, &nDestPitch,
@@ -121,38 +121,38 @@ CUresult  cudaLaunchNV12toARGBDrv(CUdeviceptr d_srcNV12, size_t nSourcePitch,
                             args, NULL);
 #else
     // This is the older Driver API launch method from CUDA (V1.0 to V3.2)
-    cutilDrvSafeCall(cuFuncSetBlockShape(fpFunc, block.x, block.y, 1));
+    checkCudaErrors(cuFuncSetBlockShape(fpFunc, block.x, block.y, 1));
     int offset = 0;
 
     // This method calls cuParamSetv() to pass device pointers also allows the ability to pass 64-bit device pointers
 
     // device pointer for Source Surface
-    cutilDrvSafeCall(cuParamSetv(fpFunc, offset, &d_srcNV12,    sizeof(d_srcNV12)));
+    checkCudaErrors(cuParamSetv(fpFunc, offset, &d_srcNV12,    sizeof(d_srcNV12)));
     offset += sizeof(d_srcNV12);
 
     // set the Source pitch
-    cutilDrvSafeCall(cuParamSetv(fpFunc, offset, &nSourcePitch, sizeof(nSourcePitch)));
+    checkCudaErrors(cuParamSetv(fpFunc, offset, &nSourcePitch, sizeof(nSourcePitch)));
     offset += sizeof(nSourcePitch);
 
     // device pointer for Destination Surface
-    cutilDrvSafeCall(cuParamSetv(fpFunc, offset, &d_dstARGB,    sizeof(d_dstARGB)));
+    checkCudaErrors(cuParamSetv(fpFunc, offset, &d_dstARGB,    sizeof(d_dstARGB)));
     offset += sizeof(d_dstARGB);
 
     //  set the Destination Pitch
-    cutilDrvSafeCall(cuParamSetv(fpFunc, offset, &nDestPitch,   sizeof(nDestPitch)));
+    checkCudaErrors(cuParamSetv(fpFunc, offset, &nDestPitch,   sizeof(nDestPitch)));
     offset += sizeof(nDestPitch);
 
     // set the width of the image
     ALIGN_OFFSET(offset, __alignof(width));
-    cutilDrvSafeCall(cuParamSeti(fpFunc, offset, width));
+    checkCudaErrors(cuParamSeti(fpFunc, offset, width));
     offset += sizeof(width);
 
     // set the height of the image
     ALIGN_OFFSET(offset, __alignof(height));
-    cutilDrvSafeCall(cuParamSeti(fpFunc, offset, height));
+    checkCudaErrors(cuParamSeti(fpFunc, offset, height));
     offset += sizeof(height);
 
-    cutilDrvSafeCall(cuParamSetSize(fpFunc, offset));
+    checkCudaErrors(cuParamSetSize(fpFunc, offset));
 
     // Launching the kernel, we need to pass in the grid dimensions
     CUresult status = cuLaunchGridAsync(fpFunc, grid.x, grid.y, streamID);

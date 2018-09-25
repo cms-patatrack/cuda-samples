@@ -182,6 +182,29 @@ ifneq ($(TARGET_ARCH),$(HOST_ARCH))
     endif
 endif
 
+ifeq ($(TARGET_OS),qnx)
+    CCFLAGS += -DWIN_INTERFACE_CUSTOM
+    LDFLAGS += -lsocket
+endif
+
+# Install directory of different arch
+CUDA_INSTALL_TARGET_DIR :=
+ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-linux)
+    CUDA_INSTALL_TARGET_DIR = targets/armv7-linux-gnueabihf/
+else ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-linux)
+    CUDA_INSTALL_TARGET_DIR = targets/aarch64-linux/
+else ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-android)
+    CUDA_INSTALL_TARGET_DIR = targets/armv7-linux-androideabi/
+else ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-android)
+    CUDA_INSTALL_TARGET_DIR = targets/aarch64-linux-androideabi/
+else ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-qnx)
+    CUDA_INSTALL_TARGET_DIR = targets/ARMv7-linux-QNX/
+else ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-qnx)
+    CUDA_INSTALL_TARGET_DIR = targets/aarch64-qnx/
+else ifeq ($(TARGET_ARCH),ppc64le)
+    CUDA_INSTALL_TARGET_DIR = targets/ppc64le-linux/
+endif
+
 # Debug build flags
 ifeq ($(dbg),1)
       NVCCFLAGS += -g -G
@@ -253,8 +276,8 @@ ifeq ($(GENCODE_FLAGS),)
 $(foreach sm,$(SMS),$(eval GENCODE_FLAGS += -gencode arch=compute_$(sm),code=sm_$(sm)))
 
 ifeq ($(SMS),)
-# Generate PTX code from SM 20
-GENCODE_FLAGS += -gencode arch=compute_20,code=compute_20
+# Generate PTX code from SM 30
+GENCODE_FLAGS += -gencode arch=compute_30,code=compute_30
 endif
 
 # Generate PTX code from the highest SM architecture in $(SMS) to guarantee forward-compatibility
@@ -267,54 +290,36 @@ endif
 ifeq ($(TARGET_OS),darwin)
   ALL_LDFLAGS += -Xcompiler -F/Library/Frameworks -Xlinker -framework -Xlinker CUDA
 else
-  CUDA_SEARCH_PATH ?=
-  ifneq ($(TARGET_ARCH),$(HOST_ARCH))
-    ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-linux)
-      ifneq ($(TARGET_FS),)
-        LIBRARIES += -L$(TARGET_FS)/usr/lib
-        CUDA_SEARCH_PATH += $(TARGET_FS)/usr/lib
-        CUDA_SEARCH_PATH += $(TARGET_FS)/usr/lib/arm-linux-gnueabihf
-      endif
-      CUDA_SEARCH_PATH += $(CUDA_PATH)/targets/armv7-linux-gnueabihf/lib/stubs
-      CUDA_SEARCH_PATH += /usr/arm-linux-gnueabihf/lib
-    else ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-linux)
-      CUDA_SEARCH_PATH += $(CUDA_PATH)/targets/aarch64-linux/lib/stubs
-    else ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-android)
-      CUDA_SEARCH_PATH += $(CUDA_PATH)/targets/armv7-linux-androideabi/lib/stubs
-    else ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-android)
-      CUDA_SEARCH_PATH += $(CUDA_PATH)/targets/aarch64-linux-androideabi/lib/stubs
-    else ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-qnx)
-      CUDA_SEARCH_PATH += $(CUDA_PATH)/targets/ARMv7-linux-QNX/lib/stubs
-    else ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-qnx)
-      CUDA_SEARCH_PATH += $(CUDA_PATH)/targets/aarch64-qnx/lib/stubs
-    else ifeq ($(TARGET_ARCH)-$(TARGET_OS),ppc64le-linux)
-      CUDA_SEARCH_PATH += $(CUDA_PATH)/targets/ppc64le-linux/lib/stubs
-    endif
-  else
-    ifneq ($(UBUNTU),)
-      CUDA_SEARCH_PATH += /usr/lib
-    else
-      CUDA_SEARCH_PATH += /usr/lib64
-    endif
+  ifeq ($(TARGET_ARCH),x86_64)
+    CUDA_SEARCH_PATH ?= $(CUDA_PATH)/lib64/stubs
+  endif
 
-    ifeq ($(TARGET_ARCH),x86_64)
-      CUDA_SEARCH_PATH += $(CUDA_PATH)/lib64/stubs
-    endif
+  ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-linux)
+    CUDA_SEARCH_PATH ?= $(CUDA_PATH)/targets/armv7-linux-gnueabihf/lib/stubs
+  endif
 
-    ifeq ($(TARGET_ARCH),armv7l)
-      CUDA_SEARCH_PATH += $(CUDA_PATH)/targets/armv7-linux-gnueabihf/lib/stubs
-      CUDA_SEARCH_PATH += /usr/lib/arm-linux-gnueabihf
-    endif
+  ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-linux)
+    CUDA_SEARCH_PATH ?= $(CUDA_PATH)/targets/aarch64-linux/lib/stubs
+  endif
 
-    ifeq ($(TARGET_ARCH),aarch64)
-      CUDA_SEARCH_PATH += /usr/lib
-      CUDA_SEARCH_PATH += $(CUDA_PATH)/targets/aarch64-linux/lib/stubs
-    endif
+  ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-android)
+    CUDA_SEARCH_PATH ?= $(CUDA_PATH)/targets/armv7-linux-androideabi/lib/stubs
+  endif
 
-    ifeq ($(TARGET_ARCH),ppc64le)
-      CUDA_SEARCH_PATH += $(CUDA_PATH)/targets/ppc64le-linux/lib/stubs
-      CUDA_SEARCH_PATH += /usr/lib/powerpc64le-linux-gnu
-    endif
+  ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-android)
+    CUDA_SEARCH_PATH ?= $(CUDA_PATH)/targets/aarch64-linux-androideabi/lib/stubs
+  endif
+
+  ifeq ($(TARGET_ARCH)-$(TARGET_OS),armv7l-qnx)
+    CUDA_SEARCH_PATH ?= $(CUDA_PATH)/targets/ARMv7-linux-QNX/lib/stubs
+  endif
+
+  ifeq ($(TARGET_ARCH)-$(TARGET_OS),aarch64-qnx)
+    CUDA_SEARCH_PATH ?= $(CUDA_PATH)/targets/aarch64-qnx/lib/stubs
+  endif
+
+  ifeq ($(TARGET_ARCH),ppc64le)
+    CUDA_SEARCH_PATH ?= $(CUDA_PATH)/targets/ppc64le-linux/lib/stubs
   endif
 
   CUDALIB ?= $(shell find -L $(CUDA_SEARCH_PATH) -maxdepth 1 -name libcuda.so)
@@ -326,7 +331,19 @@ else
   LIBRARIES += -lcuda
 endif
 
-LIBRARIES += -lcudart -lnvcuvid
+ALL_CCFLAGS += -DINIT_CUDA_GL
+# Use -no-pie if it's supported by the host compiler.
+$(shell echo "int main() { return 0; }" > test.c; $(HOST_COMPILER) -no-pie test.c 2>/dev/null)
+NOPIE ?= $(shell find a.out 2>/dev/null)
+
+ifneq ($(NOPIE),)
+    ALL_CCFLAGS += -Xcompiler -no-pie
+    ALL_LDFLAGS += -Xcompiler -no-pie
+endif
+
+$(shell rm -f a.out test.c 2>/dev/null)
+
+LIBRARIES += -L../../common/lib/linux/x86_64 -lcudart -lnvcuvid -lGLEW
 
 ifeq ($(SAMPLE_ENABLED),0)
 EXEC ?= @echo "[@]"
@@ -374,10 +391,16 @@ cudaModuleMgr.o:cudaModuleMgr.cpp
 cudaProcessFrame.o:cudaProcessFrame.cpp
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
 
+dynlink_cuda.o:dynlink_cuda.cpp
+	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
+
+dynlink_nvcuvid.o:dynlink_nvcuvid.cpp
+	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
+
 videoDecodeGL.o:videoDecodeGL.cpp
 	$(EXEC) $(NVCC) $(INCLUDES) $(ALL_CCFLAGS) $(GENCODE_FLAGS) -o $@ -c $<
 
-cudaDecodeGL: FrameQueue.o ImageGL.o VideoDecoder.o VideoParser.o VideoSource.o cudaModuleMgr.o cudaProcessFrame.o videoDecodeGL.o
+cudaDecodeGL: FrameQueue.o ImageGL.o VideoDecoder.o VideoParser.o VideoSource.o cudaModuleMgr.o cudaProcessFrame.o dynlink_cuda.o dynlink_nvcuvid.o videoDecodeGL.o
 	$(EXEC) $(NVCC) $(ALL_LDFLAGS) $(GENCODE_FLAGS) -o $@ $+ $(LIBRARIES)
 	$(EXEC) mkdir -p ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
 	$(EXEC) cp $@ ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)
@@ -386,7 +409,7 @@ run: build
 	$(EXEC) ./cudaDecodeGL
 
 clean:
-	rm -f cudaDecodeGL FrameQueue.o ImageGL.o VideoDecoder.o VideoParser.o VideoSource.o cudaModuleMgr.o cudaProcessFrame.o videoDecodeGL.o  data/$(PTX_FILE) $(PTX_FILE)
+	rm -f cudaDecodeGL FrameQueue.o ImageGL.o VideoDecoder.o VideoParser.o VideoSource.o cudaModuleMgr.o cudaProcessFrame.o dynlink_cuda.o dynlink_nvcuvid.o videoDecodeGL.o  data/$(PTX_FILE) $(PTX_FILE)
 	rm -rf ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)/cudaDecodeGL
 	rm -rf ../../bin/$(TARGET_ARCH)/$(TARGET_OS)/$(BUILD_TYPE)/$(PTX_FILE)
 

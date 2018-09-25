@@ -57,6 +57,9 @@ DOUBLE PRECISION   A( LDA, * )
 */
 
 #include <stdio.h>
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
 #include <cublas_v2.h>
 
 
@@ -66,7 +69,7 @@ __device__ void report_error(const char *strName, int info)
     printf(" ** On entry to %s parameter number %d had an illegal value\n", strName, info);
 }
 
-__device__ __noinline__ void dgetf2(cublasHandle_t cb_handle, int m, int n, double *A, int lda, int *ipiv, int *info)
+__device__ __noinline__ void dgetf2(cublasHandle_t cb_handle, int m, int n, double *A, int lda, int *ipiv, int *info, cg::thread_block cta)
 {
     cublasStatus_t status;
 
@@ -77,7 +80,7 @@ __device__ __noinline__ void dgetf2(cublasHandle_t cb_handle, int m, int n, doub
     if (threadIdx.x == 0)
         s_info = 0;
 
-    __syncthreads();
+    cg::sync(cta);
 
     // Basic     argument checking
     *info = 0;
@@ -131,7 +134,7 @@ __device__ __noinline__ void dgetf2(cublasHandle_t cb_handle, int m, int n, doub
             ipiv[j] = jp;
         }
 
-        __syncthreads();
+        cg::sync(cta);
 
         // Make sure both s_info and s_jp are valid.
         if (s_info)
@@ -155,7 +158,7 @@ __device__ __noinline__ void dgetf2(cublasHandle_t cb_handle, int m, int n, doub
             }
         }
 
-        __syncthreads();
+        cg::sync(cta);
 
         // Make sure s_info has the correct value.
         if (s_info)
@@ -181,7 +184,7 @@ __device__ __noinline__ void dgetf2(cublasHandle_t cb_handle, int m, int n, doub
             s_info = j;
         }
 
-        __syncthreads();
+        cg::sync(cta);
 
         // Make sure s_info has the correct value.
         if (s_info)
@@ -203,7 +206,7 @@ __device__ __noinline__ void dgetf2(cublasHandle_t cb_handle, int m, int n, doub
             }
         }
 
-        __syncthreads();
+        cg::sync(cta);
 
         // Make sure s_info has the correct value.
         if (s_info)

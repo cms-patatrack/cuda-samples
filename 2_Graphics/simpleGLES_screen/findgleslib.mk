@@ -55,7 +55,6 @@ endif
 ifeq ("$(TARGET_OS)","linux")
     # $(info) >> findgllib.mk -> LINUX path <<<)
     # Each set of Linux Distros have different paths for where to find their OpenGL libraries reside
-    UBUNTU_PKG_NAME = "nvidia-367"
     UBUNTU = $(shell echo $(DISTRO) | grep -i ubuntu      >/dev/null 2>&1; echo $$?)
     FEDORA = $(shell echo $(DISTRO) | grep -i fedora      >/dev/null 2>&1; echo $$?)
     RHEL   = $(shell echo $(DISTRO) | grep -i 'red\|rhel' >/dev/null 2>&1; echo $$?)
@@ -66,14 +65,16 @@ ifeq ("$(TARGET_OS)","linux")
         GLPATH := /usr/arm-linux-gnueabihf/lib
         GLLINK := -L/usr/arm-linux-gnueabihf/lib
         ifneq ($(TARGET_FS),) 
-          GLPATH += $(TARGET_FS)/usr/lib/$(UBUNTU_PKG_NAME)
           GLPATH += $(TARGET_FS)/usr/lib/arm-linux-gnueabihf
-          GLLINK += -L$(TARGET_FS)/usr/lib/$(UBUNTU_PKG_NAME)
           GLLINK += -L$(TARGET_FS)/usr/lib/arm-linux-gnueabihf
         endif 
       else
-        GLPATH    ?= /usr/lib/$(UBUNTU_PKG_NAME)
-        GLLINK    ?= -L/usr/lib/$(UBUNTU_PKG_NAME)
+        UBUNTU_PKG_NAME = $(shell which dpkg >/dev/null 2>&1 && dpkg -l 'nvidia-*' | grep '^ii' | awk '{print $$2}' | head -1)
+        ifneq ("$(UBUNTU_PKG_NAME)","")
+          GLPATH    ?= /usr/lib/$(UBUNTU_PKG_NAME)
+          GLLINK    ?= -L/usr/lib/$(UBUNTU_PKG_NAME)
+        endif
+
         DFLT_PATH ?= /usr/lib
       endif
     endif

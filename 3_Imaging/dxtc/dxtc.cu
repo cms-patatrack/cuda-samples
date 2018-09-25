@@ -10,6 +10,10 @@
  */
 
 // Utilities and system includes
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
+
 #include <helper_functions.h>
 #include <helper_cuda.h>
 
@@ -44,7 +48,7 @@ __constant__ float3 kColorMetric = { 1.0f, 1.0f, 1.0f };
 ////////////////////////////////////////////////////////////////////////////////
 // Sort colors
 ////////////////////////////////////////////////////////////////////////////////
-__device__ void sortColors(const float *values, int *ranks)
+__device__ void sortColors(const float *values, int *ranks, cg::thread_group tile)
 {
     const int tid = threadIdx.x;
 
@@ -59,6 +63,8 @@ __device__ void sortColors(const float *values, int *ranks)
 
     ranks[tid] = rank;
 
+    cg::sync(tile);
+
     // Resolve elements with the same index.
     for (int i = 0; i < 15; i++)
     {
@@ -66,13 +72,14 @@ __device__ void sortColors(const float *values, int *ranks)
         {
             ++ranks[tid];
         }
+        cg::sync(tile);
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Load color block to shared mem
 ////////////////////////////////////////////////////////////////////////////////
-__device__ void loadColorBlock(const uint *image, float3 colors[16], float3 sums[16], int xrefs[16], int blockOffset)
+__device__ void loadColorBlock(const uint *image, float3 colors[16], float3 sums[16], int xrefs[16], int blockOffset, cg::thread_block cta)
 {
     const int bid = blockIdx.x + blockOffset;
     const int idx = threadIdx.x;
@@ -80,6 +87,8 @@ __device__ void loadColorBlock(const uint *image, float3 colors[16], float3 sums
     __shared__ float dps[16];
 
     float3 tmp;
+
+    cg::thread_group tile = cg::tiled_partition(cta, 16);
 
     if (idx < 16)
     {
@@ -90,15 +99,27 @@ __device__ void loadColorBlock(const uint *image, float3 colors[16], float3 sums
         colors[idx].y = ((c >> 8) & 0xFF) * (1.0f / 255.0f);
         colors[idx].z = ((c >> 16) & 0xFF) * (1.0f / 255.0f);
 
+        cg::sync(tile);
         // Sort colors along the best fit line.
-        colorSums(colors, sums);
-        float3 axis = bestFitLine(colors, sums[0]);
+        colorSums(colors, sums, tile);
+
+        cg::sync(tile);
+
+        float3 axis = bestFitLine(colors, sums[0], tile);
+
+        cg::sync(tile);
 
         dps[idx] = dot(colors[idx], axis);
 
-        sortColors(dps, xrefs);
+        cg::sync(tile);
+
+        sortColors(dps, xrefs, tile);
+
+        cg::sync(tile);
 
         tmp = colors[idx];
+
+        cg::sync(tile);
 
         colors[xrefs[idx]] = tmp;
     }
@@ -262,7 +283,7 @@ static __device__ float evalPermutation3(const float3 *colors, uint permutation,
     return (0.25f) * dot(e, kColorMetric);
 }
 
-__device__ void evalAllPermutations(const float3 *colors, const uint *permutations, ushort &bestStart, ushort &bestEnd, uint &bestPermutation, float *errors, float3 color_sum)
+__device__ void evalAllPermutations(const float3 *colors, const uint *permutations, ushort &bestStart, ushort &bestEnd, uint &bestPermutation, float *errors, float3 color_sum, cg::thread_block cta)
 {
     const int idx = threadIdx.x;
 
@@ -304,7 +325,7 @@ __device__ void evalAllPermutations(const float3 *colors, const uint *permutatio
         bestPermutation ^= 0x55555555;    // Flip indices.
     }
 
-    __syncthreads(); // Sync here to ensure s_permutations is valid going forward
+    cg::sync(cta); // Sync here to ensure s_permutations is valid going forward
 
     for (int i = 0; i < 3; i++)
     {
@@ -340,13 +361,13 @@ __device__ void evalAllPermutations(const float3 *colors, const uint *permutatio
 ////////////////////////////////////////////////////////////////////////////////
 // Find index with minimum error
 ////////////////////////////////////////////////////////////////////////////////
-__device__ int findMinError(float *errors)
+__device__ int findMinError(float *errors, cg::thread_block cta)
 {
     const int idx = threadIdx.x;
     __shared__ int indices[NUM_THREADS];
     indices[idx] = idx;
 
-    __syncthreads();
+    cg::sync(cta);
 
     for (int d = NUM_THREADS/2; d > 0; d >>= 1)
     {
@@ -354,7 +375,7 @@ __device__ int findMinError(float *errors)
         float err1 = (idx + d) < NUM_THREADS ? errors[idx + d] : FLT_MAX;
         int index1 = (idx + d) < NUM_THREADS ? indices[idx + d] : 0;
 
-        __syncthreads();
+        cg::sync(cta);
 
         if (err1 < err0)
         {
@@ -362,7 +383,7 @@ __device__ int findMinError(float *errors)
             indices[idx] = index1;
         }
 
-        __syncthreads();
+        cg::sync(cta);
     }
 
     return indices[0];
@@ -401,27 +422,30 @@ __device__ void saveBlockDXT1(ushort start, ushort end, uint permutation, int xr
 ////////////////////////////////////////////////////////////////////////////////
 __global__ void compress(const uint *permutations, const uint *image, uint2 *result, int blockOffset)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
+
     const int idx = threadIdx.x;
 
     __shared__ float3 colors[16];
     __shared__ float3 sums[16];
     __shared__ int xrefs[16];
 
-    loadColorBlock(image, colors, sums, xrefs, blockOffset);
+    loadColorBlock(image, colors, sums, xrefs, blockOffset, cta);
 
-    __syncthreads();
+    cg::sync(cta);
 
     ushort bestStart, bestEnd;
     uint bestPermutation;
 
     __shared__ float errors[NUM_THREADS];
 
-    evalAllPermutations(colors, permutations, bestStart, bestEnd, bestPermutation, errors, sums[0]);
+    evalAllPermutations(colors, permutations, bestStart, bestEnd, bestPermutation, errors, sums[0], cta);
 
     // Use a parallel reduction to find minimum error.
-    const int minIdx = findMinError(errors);
+    const int minIdx = findMinError(errors, cta);
 
-    __syncthreads();
+    cg::sync(cta);
 
     // Only write the result of the winner thread.
     if (idx == minIdx)

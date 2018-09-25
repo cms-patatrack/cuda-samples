@@ -13,6 +13,9 @@
 
 #include <stdio.h>
 
+#include <cooperative_groups.h>
+
+namespace cg = cooperative_groups;
 #include <helper_cuda.h>
 
 #include <stdlib.h>
@@ -101,6 +104,8 @@ void containerDelete(Container<int> **g_container)
 __global__
 void placementNew(int *d_result)
 {
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     __shared__ unsigned char  __align__(8) s_buffer[sizeof(Vector<int>)];
     __shared__ int __align__(8) s_data[1024];
     __shared__ Vector<int> *s_vector;
@@ -112,7 +117,7 @@ void placementNew(int *d_result)
         s_vector = new(s_buffer) Vector<int>(1024, s_data);
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     if ((threadIdx.x & 1) == 0)
     {
@@ -120,7 +125,7 @@ void placementNew(int *d_result)
     }
 
     // Need to sync as the vector implementation does not support concurrent push/pop operations.
-    __syncthreads();
+    cg::sync(cta);
 
     int v;
 
@@ -149,7 +154,8 @@ struct ComplexType_t
 __global__
 void complexVector(int *d_result)
 {
-
+    // Handle to thread block group
+    cg::thread_block cta = cg::this_thread_block();
     __shared__ unsigned char __align__(8) s_buffer[sizeof(Vector<ComplexType_t>)];
     __shared__ ComplexType_t __align__(8) s_data[1024];
     __shared__ Vector<ComplexType_t> *s_vector;
@@ -161,7 +167,7 @@ void complexVector(int *d_result)
         s_vector = new(s_buffer) Vector<ComplexType_t>(1024, s_data);
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     if ((threadIdx.x & 1) == 0)
     {
@@ -174,7 +180,7 @@ void complexVector(int *d_result)
         s_vector->push(data);
     }
 
-    __syncthreads();
+    cg::sync(cta);
 
     ComplexType_t v;
 
@@ -294,27 +300,11 @@ int main(int argc, char **argv)
     // use command-line specified CUDA device, otherwise use device with highest Gflops/s
     cuda_device = findCudaDevice(argc, (const char **)argv);
 
-    cudaDeviceProp deviceProp;
-    checkCudaErrors(cudaGetDevice(&cuda_device));
-    checkCudaErrors(cudaGetDeviceProperties(&deviceProp, cuda_device));
-
-    if (deviceProp.major < 2)
-    {
-        printf("> This GPU with Compute Capability %d.%d does not meet minimum requirements.\n", deviceProp.major, deviceProp.minor);
-        printf("> A GPU with Compute Capability >= 2.0 is required to run %s.\n", sSDKsample);
-        printf("> Test will not run.  Exiting.\n");
-        exit(EXIT_SUCCESS);
-    }
-
     // set the heap size for device size new/delete to 128 MB
-#if CUDART_VERSION >= 4000
-    cudaDeviceSetLimit(cudaLimitMallocHeapSize, 128 * (1 << 20));
-#else
-    cudaThreadSetLimit(cudaLimitMallocHeapSize, 128 * (1 << 20));
-#endif
+    checkCudaErrors(cudaDeviceSetLimit(cudaLimitMallocHeapSize, 128 * (1 << 20)));
 
     Container<int> **d_container;
-    cudaMalloc(&d_container, sizeof(Container<int> **));
+    checkCudaErrors(cudaMalloc(&d_container, sizeof(Container<int> **)));
 
     bool bTest = false;
     int test_passed = 0;
@@ -325,7 +315,7 @@ int main(int argc, char **argv)
     printf(bTest ? "OK\n\n" : "NOT OK\n\n");
     test_passed += (bTest ? 1 : 0);
 
-    cudaFree(d_container);
+    checkCudaErrors(cudaFree(d_container));
 
     printf(" > Container = Vector, using placement new on SMEM buffer test ");
     bTest = testPlacementNew(1024);
@@ -340,4 +330,4 @@ int main(int argc, char **argv)
     printf("Test Summary: %d/3 succesfully run\n", test_passed);
 
     exit(test_passed==3 ? EXIT_SUCCESS : EXIT_FAILURE);
-};
+}
